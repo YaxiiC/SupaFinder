@@ -7,6 +7,10 @@ env/
 
 # Environment
 .env
+.env.*
+!.env.example
+*.env.backup
+*.env.supabase.*
 
 # Cache
 cache.sqlite

@@ -1,0 +1,321 @@
+"""Streamlit UI for PhD Supervisor Finder with subscription support."""
+
+import streamlit as st
+import tempfile
+from pathlib import Path
+import re
+import sys
+import os
+
+# Add project root to Python path for imports
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Initialize session state
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
+
+st.set_page_config(
+    page_title="PhD Supervisor Finder",
+    page_icon="🎓",
+    layout="wide"
+)
+
+# Sidebar for authentication and subscription
+with st.sidebar:
+    st.header("🔐 Account")
+    
+    if st.session_state.user_email:
+        st.success(f"Logged in as: {st.session_state.user_email}")
+        
+        # Check if developer
+        from app.modules.subscription import get_user_subscription, is_developer
+        is_dev = is_developer(st.session_state.user_email)
+        
+        if is_dev:
+            st.success("🔧 **Developer Mode** - Unlimited access")
+        else:
+            # Get subscription info
+            subscription = get_user_subscription(st.session_state.user_id)
+            
+            if subscription:
+                st.subheader("📊 Subscription")
+                st.write(f"**Plan:** {subscription['type'].title()}")
+                st.write(f"**Remaining searches:** {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                
+                from datetime import datetime
+                expires_at = subscription['expires_at']
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at)
+                st.write(f"**Expires:** {expires_at.strftime('%Y-%m-%d')}")
+            else:
+                st.warning("No active subscription")
+        
+        # Subscription management button
+        if st.button("💳 Manage Subscription", use_container_width=True):
+            st.session_state.show_subscription_page = True
+        
+        if st.button("📜 Search History", use_container_width=True):
+            st.session_state.show_history_page = True
+        
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.user_email = None
+            st.session_state.user_id = None
+            st.session_state.show_subscription_page = False
+            st.session_state.show_history_page = False
+            st.rerun()
+    else:
+        st.info("Please log in to use the service")
+        
+        with st.form("login_form"):
+            email = st.text_input("Email", placeholder="your.email@example.com")
+            submit_login = st.form_submit_button("Login / Register", use_container_width=True)
+            
+            if submit_login:
+                if email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+                    try:
+                        from app.modules.subscription import get_or_create_user
+                        from app.db_cloud import init_db
+                        init_db()
+                        user_id = get_or_create_user(email.lower().strip())
+                        st.session_state.user_email = email.lower().strip()
+                        st.session_state.user_id = user_id
+                        st.success("Logged in successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                else:
+                    st.error("Please enter a valid email address")
+
+# Main content
+if st.session_state.get("show_subscription_page"):
+    st.title("💳 Subscription Management")
+    st.divider()
+    
+    if not st.session_state.user_email:
+        st.error("Please log in first")
+        st.stop()
+    
+    # Get current subscription
+    from app.modules.subscription import get_user_subscription, PLANS, create_subscription
+    subscription = get_user_subscription(st.session_state.user_id)
+    
+    if subscription:
+        st.success(f"You currently have an **{subscription['type'].title()}** subscription")
+        st.write(f"- Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+        
+        from datetime import datetime
+        expires_at = subscription['expires_at']
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        st.write(f"- Expires: {expires_at.strftime('%Y-%m-%d')}")
+    else:
+        st.info("You don't have an active subscription")
+    
+    st.divider()
+    st.subheader("Available Plans")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 👤 Individual Plan")
+        st.write(f"**${PLANS['individual']['price_usd']}/month**")
+        st.write(f"- {PLANS['individual']['searches_per_month']} searches per month")
+        st.write("- Perfect for personal use")
+        
+        if st.button("Subscribe - Individual", key="subscribe_individual", use_container_width=True):
+            try:
+                from app.db_cloud import init_db
+                init_db()
+                subscription_id = create_subscription(st.session_state.user_id, "individual")
+                st.success("Subscription created successfully! You can now use the service.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+    
+    with col2:
+        st.markdown("### 🏢 Enterprise Plan")
+        st.write(f"**${PLANS['enterprise']['price_usd']}/month**")
+        st.write(f"- {PLANS['enterprise']['searches_per_month']} searches per month")
+        st.write("- Ideal for teams and organizations")
+        
+        if st.button("Subscribe - Enterprise", key="subscribe_enterprise", use_container_width=True):
+            try:
+                from app.db_cloud import init_db
+                init_db()
+                subscription_id = create_subscription(st.session_state.user_id, "enterprise")
+                st.success("Subscription created successfully! You can now use the service.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+    
+    if st.button("← Back to Main", use_container_width=True):
+        st.session_state.show_subscription_page = False
+        st.rerun()
+
+elif st.session_state.get("show_history_page"):
+    st.title("📜 Search History")
+    st.divider()
+    
+    if not st.session_state.user_email:
+        st.error("Please log in first")
+        st.stop()
+    
+    from app.modules.subscription import get_user_search_history
+    history = get_user_search_history(st.session_state.user_id, limit=50)
+    
+    if history:
+        for search in history:
+            with st.expander(f"🔍 {search['keywords'][:50]}... ({search['created_at']})"):
+                st.write(f"**Type:** {search['type']}")
+                st.write(f"**Keywords:** {search['keywords']}")
+                st.write(f"**Results:** {search['result_count']}")
+                st.write(f"**Date:** {search['created_at']}")
+    else:
+        st.info("No search history yet")
+    
+    if st.button("← Back to Main", use_container_width=True):
+        st.session_state.show_history_page = False
+        st.rerun()
+
+else:
+    # Main search interface
+    st.title("🎓 PhD Supervisor Finder")
+    st.markdown("*AI-assisted PhD supervisor discovery using DeepSeek*")
+    
+    if not st.session_state.user_email:
+        st.warning("⚠️ Please log in using the sidebar to use the service. First-time users get 1 free search!")
+    
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📄 Your CV (Optional)")
+        st.caption("You can upload a CV, enter keywords, or both")
+        cv_file = st.file_uploader("Upload your CV (PDF or TXT)", type=["pdf", "txt"], help="Optional: Upload your CV to extract research interests automatically")
+        
+        st.subheader("🔬 Research Keywords (Optional)")
+        keywords = st.text_area(
+            "Enter your research keywords (comma-separated)",
+            placeholder="e.g., knee MRI, cartilage segmentation, radiomics, diffusion model",
+            height=100,
+            help="Optional: Enter your research keywords. At least one of CV or keywords is required."
+        )
+    
+    with col2:
+        st.subheader("🏛️ Universities")
+        st.info("Using built-in universities list (Top 200+ universities worldwide)")
+        
+        st.subheader("🎯 Filters")
+        
+        regions = st.text_input(
+            "Regions (comma-separated)",
+            placeholder="e.g., UK, Europe, US"
+        )
+        
+        countries = st.text_input(
+            "Countries (comma-separated)",
+            placeholder="e.g., Singapore, Sweden, United Kingdom"
+        )
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            qs_max = st.number_input("Max QS Rank", min_value=1, max_value=1000, value=100)
+        with col_b:
+            target = st.number_input("Target Supervisors", min_value=10, max_value=500, value=100)
+        
+        local_first = st.checkbox("Use local DB first (recommended)", value=True)
+    
+    st.divider()
+    
+    if st.button("🚀 Find Supervisors", type="primary", use_container_width=True):
+        if not st.session_state.user_email:
+            st.error("Please log in first using the sidebar")
+        elif not cv_file and not keywords:
+            st.error("Please upload a CV or enter research keywords (at least one is required)")
+        else:
+            with st.spinner("Running supervisor discovery pipeline..."):
+                try:
+                    # Use built-in universities template
+                    from app.config import DATA_DIR
+                    uni_path = DATA_DIR / "universities_template.xlsx"
+                    
+                    if not uni_path.exists():
+                        st.error(f"Universities template not found at {uni_path}")
+                        st.stop()
+                    
+                    # Save uploaded CV to temp directory if provided
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        tmpdir = Path(tmpdir)
+                        
+                        # Save CV if provided
+                        cv_path = None
+                        if cv_file:
+                            cv_path = tmpdir / cv_file.name
+                            cv_path.write_bytes(cv_file.read())
+                        
+                        # Output path
+                        output_path = tmpdir / "supervisors.xlsx"
+                        
+                        # Parse regions
+                        regions_list = [r.strip() for r in regions.split(",")] if regions else None
+                        
+                        # Parse countries
+                        countries_list = [c.strip() for c in countries.split(",")] if countries else None
+                        
+                        # Import and run pipeline
+                        from app.pipeline import run_pipeline
+                        from app.db_cloud import init_db
+                        init_db()
+                        
+                        run_pipeline(
+                            cv_path=cv_path,
+                            keywords=keywords.strip() if keywords else None,
+                            universities_path=uni_path,
+                            output_path=output_path,
+                            regions=regions_list,
+                            countries=countries_list,
+                            qs_max=qs_max if qs_max else None,
+                            target=target,
+                            local_first=local_first,
+                            user_id=st.session_state.user_id
+                        )
+                        
+                        # Read output and provide download
+                        if output_path.exists():
+                            with open(output_path, "rb") as f:
+                                st.download_button(
+                                    label="📥 Download Results (Excel)",
+                                    data=f.read(),
+                                    file_name="supervisors.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True
+                                )
+                            st.success("Pipeline completed successfully!")
+                            
+                            # Show updated subscription info
+                            from app.modules.subscription import get_user_subscription
+                            subscription = get_user_subscription(st.session_state.user_id)
+                            if subscription:
+                                st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                        else:
+                            st.error("No output file generated")
+                            
+                except ValueError as e:
+                    # Subscription-related errors
+                    st.error(str(e))
+                    if "subscription" in str(e).lower() or "searches" in str(e).lower():
+                        if st.button("💳 Go to Subscription Page", use_container_width=True):
+                            st.session_state.show_subscription_page = True
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"Error running pipeline: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+    
+    st.divider()
+    st.caption("PhD Supervisor Finder • LLM-first approach using DeepSeek")

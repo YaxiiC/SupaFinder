@@ -6,7 +6,7 @@ from typing import Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from app.config import CACHE_DB
+from app.config import CACHE_DB, get_secret
 
 
 def get_db_connection(db_path: Optional[Path] = None):
@@ -17,7 +17,7 @@ def get_db_connection(db_path: Optional[Path] = None):
     - Cloud SQLite (via environment variable)
     """
     # Check for remote database configuration
-    db_type = os.getenv("DB_TYPE", "sqlite").lower()
+    db_type = get_secret("DB_TYPE", "sqlite").lower()
     
     if db_type == "postgresql":
         # PostgreSQL connection
@@ -27,12 +27,12 @@ def get_db_connection(db_path: Optional[Path] = None):
             
             # Supabase requires SSL connection
             conn = psycopg2.connect(
-                host=os.getenv("DB_HOST", "localhost"),
-                port=os.getenv("DB_PORT", "5432"),
-                database=os.getenv("DB_NAME", "superfinder"),
-                user=os.getenv("DB_USER", "postgres"),
-                password=os.getenv("DB_PASSWORD", ""),
-                sslmode=os.getenv("DB_SSLMODE", "require")  # Supabase requires SSL
+                host=get_secret("DB_HOST", "localhost"),
+                port=get_secret("DB_PORT", "5432"),
+                database=get_secret("DB_NAME", "superfinder"),
+                user=get_secret("DB_USER", "postgres"),
+                password=get_secret("DB_PASSWORD", ""),
+                sslmode=get_secret("DB_SSLMODE", "require")  # Supabase requires SSL
             )
             return conn
         except ImportError:
@@ -42,7 +42,7 @@ def get_db_connection(db_path: Optional[Path] = None):
     
     elif db_type == "cloud_sqlite":
         # SQLite file stored in cloud directory (e.g., synced via Dropbox, iCloud, etc.)
-        cloud_path = os.getenv("CLOUD_DB_PATH")
+        cloud_path = get_secret("CLOUD_DB_PATH")
         if cloud_path:
             db_path = Path(cloud_path)
         else:

@@ -4,7 +4,36 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Load .env file for local development
 load_dotenv()
+
+# Try to import streamlit for secrets (only available in Streamlit Cloud)
+try:
+    import streamlit as st
+    STREAMLIT_AVAILABLE = True
+except ImportError:
+    STREAMLIT_AVAILABLE = False
+    st = None
+
+
+def get_secret(key: str, default: str = "") -> str:
+    """Get secret from Streamlit Secrets or environment variable.
+    
+    Priority:
+    1. Streamlit Secrets (if running on Streamlit Cloud)
+    2. Environment variable (for local development)
+    """
+    if STREAMLIT_AVAILABLE and st is not None:
+        try:
+            # Check if st.secrets exists and has the key
+            if hasattr(st, 'secrets') and key in st.secrets:
+                return st.secrets[key]
+        except Exception:
+            # If secrets not available, fall back to environment variable
+            pass
+    
+    # Fall back to environment variable
+    return os.getenv(key, default)
 
 # Paths
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -13,13 +42,13 @@ OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 CACHE_DB = PROJECT_ROOT / "cache.sqlite"
 
 # DeepSeek API
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_API_KEY = get_secret("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = get_secret("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_MODEL = get_secret("DEEPSEEK_MODEL", "deepseek-chat")
 
 # Search API - Google Custom Search Engine (CSE)
-GOOGLE_CSE_KEY = os.getenv("GOOGLE_CSE_KEY", "")
-GOOGLE_CSE_CX = os.getenv("GOOGLE_CSE_CX", "")
+GOOGLE_CSE_KEY = get_secret("GOOGLE_CSE_KEY", "")
+GOOGLE_CSE_CX = get_secret("GOOGLE_CSE_CX", "")
 # Alternative search providers (not currently used)
 BING_SEARCH_KEY = os.getenv("BING_SEARCH_KEY", "")
 

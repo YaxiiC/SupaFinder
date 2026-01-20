@@ -12,6 +12,11 @@ env/
 *.env.backup
 *.env.supabase.*
 
+# Streamlit secrets template (contains real API keys)
+streamlit_secrets.toml
+*.secrets.toml
+streamlit_secrets.toml.template
+
 # Cache
 cache.sqlite
 *.sqlite

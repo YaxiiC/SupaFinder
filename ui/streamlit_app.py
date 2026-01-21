@@ -485,11 +485,22 @@ else:
     st.divider()
     
     if st.button("🚀 Find Supervisors", type="primary", use_container_width=True):
+        # Debug: Check button click
+        st.write("🔴 DEBUG: Button clicked!")
+        
         if not st.session_state.user_email:
             st.error("Please log in first using the sidebar")
+            st.write("🔴 DEBUG: User not logged in")
         elif not cv_file and not keywords:
             st.error("Please upload a CV or enter research keywords (at least one is required)")
+            st.write("🔴 DEBUG: No CV or keywords provided")
         else:
+            st.write("🔴 DEBUG: Starting search process...")
+            st.write(f"🔴 DEBUG: User email: {st.session_state.user_email}")
+            st.write(f"🔴 DEBUG: User ID: {st.session_state.user_id}")
+            st.write(f"🔴 DEBUG: Has CV: {cv_file is not None}")
+            st.write(f"🔴 DEBUG: Keywords: {keywords[:50] if keywords else 'None'}")
+            
             # Create progress tracking components
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -504,98 +515,132 @@ else:
                 if "found_count" in kwargs:
                     stats_text.success(f"✅ **Progress:** Found {kwargs['found_count']} supervisors so far")
             
-                try:
-                    # Use built-in universities template
-                    from app.config import DATA_DIR
-                    uni_path = DATA_DIR / "universities_template.xlsx"
+            try:
+                st.write("🔴 DEBUG: Entered try block")
+                
+                # Initialize status
+                status_text.info("🔍 Starting search...")
+                st.write("🔴 DEBUG: Status initialized")
+                
+                # Use built-in universities template
+                from app.config import DATA_DIR
+                uni_path = DATA_DIR / "universities_template.xlsx"
+                st.write(f"🔴 DEBUG: University path: {uni_path}")
+                
+                if not uni_path.exists():
+                    st.error(f"Universities template not found at {uni_path}")
+                    st.stop()
+                
+                status_text.info("📁 Preparing files...")
+                st.write("🔴 DEBUG: Preparing files...")
+                
+                # Save uploaded CV to temp directory if provided
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmpdir = Path(tmpdir)
                     
-                    if not uni_path.exists():
-                        st.error(f"Universities template not found at {uni_path}")
-                        st.stop()
+                    # Save CV if provided
+                    cv_path = None
+                    if cv_file:
+                        cv_path = tmpdir / cv_file.name
+                        cv_path.write_bytes(cv_file.read())
                     
-                    # Save uploaded CV to temp directory if provided
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        tmpdir = Path(tmpdir)
+                    # Output path
+                    output_path = tmpdir / "supervisors.xlsx"
+                    
+                    # Parse regions
+                    regions_list = [r.strip() for r in regions.split(",")] if regions else None
+                    
+                    # Parse countries
+                    countries_list = [c.strip() for c in countries.split(",")] if countries else None
+                    
+                    # Import and run pipeline
+                    status_text.info("🔧 Initializing pipeline...")
+                    st.write("🔴 DEBUG: Initializing pipeline...")
+                    from app.pipeline import run_pipeline
+                    from app.db_cloud import init_db
+                    import inspect
+                    init_db()
+                    st.write("🔴 DEBUG: Database initialized")
+                    
+                    # Check subscription before running
+                    if st.session_state.user_id:
+                        st.write("🔴 DEBUG: Checking subscription...")
+                        from app.modules.subscription import can_perform_search
+                        can_search, error_msg, sub_info = can_perform_search(st.session_state.user_id)
+                        if not can_search:
+                            st.error(f"❌ {error_msg}")
+                            if "subscription" in error_msg.lower() or "searches" in error_msg.lower():
+                                if st.button("💳 Go to Subscription Page", use_container_width=True):
+                                    st.session_state.show_subscription_page = True
+                                    st.rerun()
+                            st.stop()
+                        st.write(f"🔴 DEBUG: Subscription check passed. Remaining: {sub_info.get('remaining_searches', 'N/A')}")
+                        status_text.info(f"✅ Subscription check passed. Remaining searches: {sub_info.get('remaining_searches', 'N/A')}")
+                    
+                    # Check if run_pipeline accepts progress_callback parameter
+                    # This provides compatibility if Streamlit Cloud hasn't updated yet
+                    st.write("🔴 DEBUG: Preparing pipeline arguments...")
+                    sig = inspect.signature(run_pipeline)
+                    kwargs = {
+                        "cv_path": cv_path,
+                        "keywords": keywords.strip() if keywords else None,
+                        "universities_path": uni_path,
+                        "output_path": output_path,
+                        "regions": regions_list,
+                        "countries": countries_list,
+                        "qs_max": qs_max if qs_max else None,
+                        "target": target,
+                        "local_first": local_first,
+                        "user_id": st.session_state.user_id,
+                    }
+                    
+                    # Only add progress_callback if the function accepts it
+                    if "progress_callback" in sig.parameters:
+                        kwargs["progress_callback"] = update_progress
+                    
+                    st.write("🔴 DEBUG: Calling run_pipeline...")
+                    status_text.info("🚀 Running pipeline...")
+                    run_pipeline(**kwargs)
+                    st.write("🔴 DEBUG: Pipeline completed!")
+                    
+                    # Clear progress indicators
+                    progress_bar.progress(1.0)
+                    status_text.empty()
+                    stats_text.empty()
+                    
+                    # Read output and provide download
+                    if output_path.exists():
+                        with open(output_path, "rb") as f:
+                            st.download_button(
+                                label="📥 Download Results (Excel)",
+                                data=f.read(),
+                                file_name="supervisors.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        st.success("✅ Pipeline completed successfully!")
                         
-                        # Save CV if provided
-                        cv_path = None
-                        if cv_file:
-                            cv_path = tmpdir / cv_file.name
-                            cv_path.write_bytes(cv_file.read())
-                        
-                        # Output path
-                        output_path = tmpdir / "supervisors.xlsx"
-                        
-                        # Parse regions
-                        regions_list = [r.strip() for r in regions.split(",")] if regions else None
-                        
-                        # Parse countries
-                        countries_list = [c.strip() for c in countries.split(",")] if countries else None
-                        
-                        # Import and run pipeline
-                        from app.pipeline import run_pipeline
-                        from app.db_cloud import init_db
-                        import inspect
-                        init_db()
-                        
-                        # Check if run_pipeline accepts progress_callback parameter
-                        # This provides compatibility if Streamlit Cloud hasn't updated yet
-                        sig = inspect.signature(run_pipeline)
-                        kwargs = {
-                            "cv_path": cv_path,
-                            "keywords": keywords.strip() if keywords else None,
-                            "universities_path": uni_path,
-                            "output_path": output_path,
-                            "regions": regions_list,
-                            "countries": countries_list,
-                            "qs_max": qs_max if qs_max else None,
-                            "target": target,
-                            "local_first": local_first,
-                            "user_id": st.session_state.user_id,
-                        }
-                        
-                        # Only add progress_callback if the function accepts it
-                        if "progress_callback" in sig.parameters:
-                            kwargs["progress_callback"] = update_progress
-                        
-                        run_pipeline(**kwargs)
-                        
-                        # Clear progress indicators
-                        progress_bar.progress(1.0)
-                        status_text.empty()
-                        stats_text.empty()
-                        
-                        # Read output and provide download
-                        if output_path.exists():
-                            with open(output_path, "rb") as f:
-                                st.download_button(
-                                    label="📥 Download Results (Excel)",
-                                    data=f.read(),
-                                    file_name="supervisors.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True
-                                )
-                            st.success("✅ Pipeline completed successfully!")
-                            
-                            # Show updated subscription info
-                            from app.modules.subscription import get_user_subscription
-                            subscription = get_user_subscription(st.session_state.user_id)
-                            if subscription:
-                                st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
-                        else:
-                            st.error("No output file generated")
-                            
-                except ValueError as e:
-                    # Subscription-related errors
-                    st.error(str(e))
-                    if "subscription" in str(e).lower() or "searches" in str(e).lower():
-                        if st.button("💳 Go to Subscription Page", use_container_width=True):
-                            st.session_state.show_subscription_page = True
-                            st.rerun()
-                except Exception as e:
-                    st.error(f"Error running pipeline: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+                        # Show updated subscription info
+                        from app.modules.subscription import get_user_subscription
+                        subscription = get_user_subscription(st.session_state.user_id)
+                        if subscription:
+                            st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                    else:
+                        st.error("No output file generated")
+            
+            except ValueError as e:
+                # Subscription-related errors
+                st.write(f"🔴 DEBUG: ValueError caught: {e}")
+                st.error(str(e))
+                if "subscription" in str(e).lower() or "searches" in str(e).lower():
+                    if st.button("💳 Go to Subscription Page", use_container_width=True):
+                        st.session_state.show_subscription_page = True
+                        st.rerun()
+            except Exception as e:
+                st.write(f"🔴 DEBUG: Exception caught: {e}")
+                st.error(f"Error running pipeline: {e}")
+                import traceback
+                st.code(traceback.format_exc())
     
     st.divider()
     st.caption("PhD Supervisor Finder • LLM-first approach using DeepSeek")

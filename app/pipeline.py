@@ -410,6 +410,27 @@ def run_pipeline(
     
     # Step 4: Online search if needed
     need_count = target - len(all_profiles)
+    
+    # Initialize statistics variables (needed for final summary even if no online search)
+    total_profile_pages = 0
+    total_crawled_ok = 0
+    total_reclassified_as_profile = 0
+    total_extracted_ok = 0
+    total_dropped_reasons = {
+        "domain_mismatch": 0,
+        "validate_failed": 0,
+        "text_too_short": 0,
+        "not_a_person": 0,
+        "fetch_failed": 0,
+        "extraction_failed": 0,
+        "extraction_failed: no_name": 0,
+        "extraction_failed: invalid_name": 0,
+        "extraction_failed: student_postdoc": 0,
+        "extraction_failed: negative_keyword": 0,
+        "extraction_failed: very_low_fit_score": 0,
+        "other": 0
+    }
+    
     if need_count > 0:
         console.print(f"[yellow]Need {need_count} more supervisors, searching online...[/yellow]")
         if progress_callback:
@@ -423,26 +444,6 @@ def run_pipeline(
             console=console
         ) as progress:
             task = progress.add_task("Processing universities...", total=len(universities))
-            
-            # Statistics tracking
-            total_profile_pages = 0
-            total_crawled_ok = 0
-            total_reclassified_as_profile = 0
-            total_extracted_ok = 0
-            total_dropped_reasons = {
-                "domain_mismatch": 0,
-                "validate_failed": 0,
-                "text_too_short": 0,
-                "not_a_person": 0,
-                "fetch_failed": 0,
-                "extraction_failed": 0,
-                "extraction_failed: no_name": 0,
-                "extraction_failed: invalid_name": 0,
-                "extraction_failed: student_postdoc": 0,
-                "extraction_failed: negative_keyword": 0,
-                "extraction_failed: very_low_fit_score": 0,
-                "other": 0
-            }
             
             for idx, university in enumerate(universities):
                 progress.update(task, description=f"Processing {university.institution}...")

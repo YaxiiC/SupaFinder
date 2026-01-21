@@ -38,7 +38,9 @@ class ProfileExtractor:
         url: str,
         university: University,
         research_profile: ResearchProfile,
-        debug: bool = False
+        debug: bool = False,
+        allow_student_postdoc: bool = False,
+        allow_low_fit_score: bool = False
     ) -> Tuple[Optional[SupervisorProfile], Optional[str]]:
         """Extract supervisor profile from page content.
         
@@ -147,8 +149,8 @@ class ProfileExtractor:
                     print(f"  [DEBUG] Skipped {url[:60]}: no academic title found")
                 return None, skip_reason
         
-        # Check for excluded titles (student/postdoc) - but allow if it's a PI
-        if not is_pi:
+        # Check for excluded titles (student/postdoc) - but allow if it's a PI or if allow_student_postdoc is True
+        if not is_pi and not allow_student_postdoc:
             excluded_patterns = [
                 r'\bphd\s+student\b', r'\bph\.?d\.?\s+student\b',
                 r'\bdoctoral\s+student\b', r'\bgraduate\s+student\b',
@@ -190,7 +192,8 @@ class ProfileExtractor:
         
         # Only reject if fit_score is extremely low (< 0.1) - BUT allow PI
         # PI might have low fit_score but still be valid supervisors
-        if extraction.fit_score < 0.1 and not is_pi:
+        # If allow_low_fit_score=True (manual addition), always allow extraction
+        if extraction.fit_score < 0.1 and not is_pi and not allow_low_fit_score:
             skip_reason = f"very_low_fit_score_{extraction.fit_score:.2f}"
             if debug:
                 print(f"  [DEBUG] Skipped {url[:60]}: very low fit_score {extraction.fit_score:.2f}")
@@ -248,7 +251,20 @@ class ProfileExtractor:
             text = h1.get_text(strip=True)
             # Explicitly reject common non-name words
             text_lower = text.lower().strip()
-            if text_lower in ["alumni", "discovery", "discover", "giving", "about", "home", "contact"]:
+            reject_words = [
+                "alumni", "discovery", "discover", "giving", "about", "home", "contact",
+                "visiting", "current", "doctoral", "students", "student", "fellows",
+                "associates", "assistants", "emeritus", "adjunct",
+                # Common research topic words that are NOT names
+                "music", "covid", "covid-19", "coronavirus", "pandemic",
+                "therapy", "intervention", "treatment", "disease", "disorder",
+                "education", "research", "study", "analysis", "method",
+                "theory", "practice", "approach", "framework", "model",
+                "health", "medicine", "clinical", "medical", "patient",
+                "learning", "teaching", "instruction", "curriculum",
+                "project", "program", "initiative", "collaboration"
+            ]
+            if text_lower in reject_words or any(word in text_lower for word in ["visiting ", "current ", "doctoral student", "sts"]):
                 return None
             # Filter out generic titles
             if (len(text) < 100 and 
@@ -274,7 +290,20 @@ class ProfileExtractor:
                     text = text.split(sep)[0].strip()
             # Explicitly reject common non-name words
             text_lower = text.lower().strip()
-            if text_lower in ["alumni", "discovery", "discover", "giving", "about", "home", "contact"]:
+            reject_words = [
+                "alumni", "discovery", "discover", "giving", "about", "home", "contact",
+                "visiting", "current", "doctoral", "students", "student", "fellows",
+                "associates", "assistants", "emeritus", "adjunct",
+                # Common research topic words that are NOT names
+                "music", "covid", "covid-19", "coronavirus", "pandemic",
+                "therapy", "intervention", "treatment", "disease", "disorder",
+                "education", "research", "study", "analysis", "method",
+                "theory", "practice", "approach", "framework", "model",
+                "health", "medicine", "clinical", "medical", "patient",
+                "learning", "teaching", "instruction", "curriculum",
+                "project", "program", "initiative", "collaboration"
+            ]
+            if text_lower in reject_words or any(word in text_lower for word in ["visiting ", "current ", "doctoral student", "sts"]):
                 return None
             if len(text) < 60 and self._looks_like_name(text):
                 return text
@@ -332,11 +361,50 @@ class ProfileExtractor:
             "center", "centre", "program", "programme", "course",
             "news", "events", "announcements", "search", "find",
             "browse", "list", "all", "view", "show", "more",
-            "alumni", "discovery", "discover", "giving", "about-us"
+            "alumni", "discovery", "discover", "giving", "about-us",
+            "visiting", "current", "doctoral", "students", "student",
+            "postdoctoral", "postdoc", "fellow", "fellows", "research fellow",
+            "associate", "assistant", "emeritus", "adjunct",
+            # Common research topic words that are NOT names
+            "music", "covid", "covid-19", "coronavirus", "pandemic",
+            "therapy", "intervention", "treatment", "disease", "disorder",
+            "education", "research", "study", "analysis", "method",
+            "theory", "practice", "approach", "framework", "model",
+            "system", "technology", "application", "development",
+            "learning", "teaching", "instruction", "curriculum",
+            "health", "medicine", "clinical", "medical", "patient",
+            "publication", "journal", "article", "paper", "conference",
+            "project", "program", "initiative", "collaboration",
+            # Common nouns that are clearly not names
+            "service", "support", "help", "information", "resources",
+            "events", "calendar", "schedule", "location", "address",
+            "phone", "email", "website", "link", "download",
+            "publication", "publications", "grants", "funding",
+            # Academic/administrative terms
+            "admission", "application", "registration", "enrollment",
+            "tuition", "scholarship", "financial", "aid", "support"
         ]
         text_lower = text.lower()
         if any(word in text_lower for word in non_name_words):
             return False
+        
+        # Additional check: if it's a single word, reject common nouns
+        words = text_lower.split()
+        if len(words) == 1:
+            single_word_blacklist = [
+                "music", "covid", "therapy", "education", "research",
+                "study", "analysis", "health", "medicine", "clinical",
+                "treatment", "intervention", "patient", "disease",
+                "disorder", "learning", "teaching", "method", "theory",
+                "practice", "approach", "framework", "model", "system",
+                "technology", "application", "development", "project",
+                "program", "initiative", "collaboration", "service",
+                "support", "help", "information", "resources", "news",
+                "events", "publication", "publications", "grants",
+                "funding", "admission", "application", "registration"
+            ]
+            if words[0] in single_word_blacklist:
+                return False
         
         # Reject academic/program names (e.g., "Taught Masters Mechanical Engineering")
         academic_terms = [
@@ -346,7 +414,11 @@ class ProfileExtractor:
             "hydrodynamics", "lab", "laboratory", "lab", "studentship", "studentships",
             "student support", "accessibility", "links", "general engineering",
             "integrated", "comfort", "engineering", "mediacom", "support",
-            "fellowship", "fellowships", "scholarship", "scholarships"
+            "fellowship", "fellowships", "scholarship", "scholarships",
+            # Directory/category terms
+            "visiting", "current", "doctoral students", "doctoral student",
+            "postdoctoral", "fellows", "associates", "assistants", "emeritus",
+            "adjunct", "affiliated", "honorary"
         ]
         if any(term in text_lower for term in academic_terms):
             return False
@@ -359,7 +431,11 @@ class ProfileExtractor:
         academic_phrases = [
             "mechanical engineering", "electronic engineering", "general engineering",
             "student support", "phd studentship", "accessibility links",
-            "integrated comfort engineering", "hydrodynamics lab"
+            "integrated comfort engineering", "hydrodynamics lab",
+            # Directory/category phrases
+            "visiting", "current doctoral students", "current doctoral student",
+            "doctoral students", "postdoctoral fellows", "research associates",
+            "visiting scholars", "visiting professors", "affiliated faculty"
         ]
         for phrase in academic_phrases:
             if phrase in text_lower:
@@ -385,8 +461,12 @@ class ProfileExtractor:
             if len(text) <= 3 or text.isupper():
                 return False
             # Reject common single-word navigation/page titles
-            common_single_words = ["alumni", "discovery", "discover", "giving", "about", 
-                                 "home", "contact", "search", "directory", "profile"]
+            common_single_words = [
+                "alumni", "discovery", "discover", "giving", "about", 
+                "home", "contact", "search", "directory", "profile",
+                "visiting", "current", "doctoral", "students", "student",
+                "fellows", "associates", "assistants", "emeritus", "adjunct"
+            ]
             if text.lower() in common_single_words:
                 return False
             # Allow single-word names if they're reasonable length and capitalized
@@ -433,6 +513,12 @@ class ProfileExtractor:
             r'actu\.', r'news\.', r'\.edu/news', r'\.ac\.uk/news',
             # UCL-specific: exclude URLs that are just "alumni" or "discover" (not profile pages)
             r'profiles\.ucl\.ac\.uk/(alumni|discover|discovery|giving|about-us)(/|$)',
+            # Additional news/article patterns
+            r'news\.[^/]+/',  # news.domain.com
+            r'\.edu/news/', r'\.ac\.uk/news/', r'\.edu/blog/', r'\.ac\.uk/blog/',
+            r'/story/', r'/stories/', r'/post/', r'/posts/',
+            r'/magazine/', r'/mag/', r'/update/', r'/updates/',
+            r'/media/', r'/press/', r'/media-center/', r'/communications/',
         ]
         
         for pattern in exclude_patterns:
@@ -506,7 +592,10 @@ class ProfileExtractor:
             "all members", "all staff", "all faculty", "all people",
             "browse by", "filter by", "search results", "view all",
             "staff directory", "faculty directory",
-            "people directory", "member directory", "researcher directory"
+            "people directory", "member directory", "researcher directory",
+            "visiting", "current doctoral students", "doctoral students",
+            "postdoctoral fellows", "research associates", "visiting scholars",
+            "visiting professors", "affiliated faculty", "honorary"
         ]
         
         first_chunk = text_lower[:2000]

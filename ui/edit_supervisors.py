@@ -36,6 +36,153 @@ def get_cursor():
 # Sidebar for navigation
 st.sidebar.header("Navigation")
 
+# Add new supervisor section
+with st.sidebar.expander("➕ Add New Supervisor", expanded=False):
+    st.markdown("**Extract from URL**")
+    new_profile_url = st.text_input(
+        "Profile URL",
+        placeholder="https://profiles.example.edu/person/john-smith",
+        key="new_profile_url"
+    )
+    
+    # Research area context (optional, for better keyword extraction)
+    research_context = st.text_input(
+        "Research Context (optional)",
+        placeholder="e.g., music therapy, materials science",
+        help="Optional: Provide research area context for better keyword extraction",
+        key="research_context"
+    )
+    
+    if st.button("🔍 Extract from URL", use_container_width=True, key="extract_btn"):
+        if new_profile_url:
+            with st.spinner("Extracting information from URL..."):
+                try:
+                    # Import necessary modules
+                    from app.modules.crawl import crawler
+                    from app.modules.profile import profile_extractor
+                    from app.modules.llm_deepseek import llm_client
+                    from app.schemas import ResearchProfile, SupervisorProfile, University
+                    from urllib.parse import urlparse
+                    
+                    # Fetch the page
+                    page = crawler.fetch(new_profile_url)
+                    
+                    if page["status_code"] != 200:
+                        st.error(f"Failed to fetch URL: HTTP {page['status_code']}")
+                    else:
+                        # Extract domain and try to infer university
+                        parsed_url = urlparse(new_profile_url)
+                        domain = parsed_url.netloc
+                        
+                        # Create a dummy university for extraction
+                        dummy_university = University(
+                            institution="Unknown",  # Will be updated by user
+                            country="",
+                            region="",
+                            domain=domain,
+                            qs_rank=None
+                        )
+                        
+                        # Create a research profile (use provided context or empty)
+                        # For keyword extraction from profile page, we don't need user's research profile
+                        # The LLM will extract keywords directly from the supervisor's page
+                        research_profile = ResearchProfile()  # Empty - keywords extracted from page content
+                        
+                        # Extract profile information
+                        html = page.get("html", "")
+                        text_content = page.get("text_content", "")
+                        
+                        # Try extraction with allow_student_postdoc=True and allow_low_fit_score=True for manual addition
+                        profile, failure_reason = profile_extractor.extract(
+                            html=html,
+                            text_content=text_content,
+                            url=new_profile_url,
+                            university=dummy_university,
+                            research_profile=research_profile,
+                            debug=True,
+                            allow_student_postdoc=True,  # Allow student/postdoc for manual addition
+                            allow_low_fit_score=True     # Allow low fit_score for manual addition
+                        )
+                        
+                        if profile:
+                            # Store extracted profile in session state for form
+                            st.session_state['extracted_profile'] = {
+                                'name': profile.name or '',
+                                'title': profile.title or '',
+                                'institution': profile.institution or '',
+                                'domain': domain,
+                                'country': profile.country or '',
+                                'region': profile.region or '',
+                                'email': profile.email or '',
+                                'email_confidence': profile.email_confidence or 'none',
+                                'profile_url': new_profile_url,
+                                'homepage_url': profile.homepage_url or '',
+                                'keywords': profile.keywords or [],
+                                'evidence_snippets': profile.evidence_snippets or []
+                            }
+                            
+                            # Show appropriate warnings/messages
+                            warnings = []
+                            if failure_reason == "student_postdoc":
+                                warnings.append("detected as student/postdoc position")
+                            if profile.fit_score is not None and profile.fit_score < 0.1:
+                                warnings.append(f"low fit_score ({profile.fit_score:.2f})")
+                            
+                            if warnings:
+                                st.warning(f"⚠️ Extracted profile, but {', '.join(warnings)}. You can still add it manually.")
+                            else:
+                                st.success("✓ Successfully extracted profile information!")
+                            st.info("Please fill in any missing information below and click 'Add to Database'")
+                        else:
+                            # Even if extraction failed, try to extract basic info (name, email) for manual entry
+                            try:
+                                from bs4 import BeautifulSoup
+                                soup = BeautifulSoup(html, "html.parser")
+                                
+                                # Try to extract at least name and email
+                                basic_name = profile_extractor._extract_name(soup, text_content, new_profile_url)
+                                basic_email, _, _ = profile_extractor._extract_email(html, text_content)
+                                
+                                if basic_name or basic_email:
+                                    # Extract keywords using LLM even if full extraction failed
+                                    extraction = llm_client.extract_profile_keywords(text_content[:4000], research_profile)
+                                    
+                                    st.warning(f"⚠️ Full extraction failed: {failure_reason}")
+                                    st.info("Extracted basic information. You can manually add the supervisor below.")
+                                    
+                                    # Store basic info for manual entry
+                                    st.session_state['extracted_profile'] = {
+                                        'name': basic_name or '',
+                                        'title': '',
+                                        'institution': '',
+                                        'domain': domain,
+                                        'country': '',
+                                        'region': '',
+                                        'email': basic_email or '',
+                                        'email_confidence': 'high' if basic_email else 'none',
+                                        'profile_url': new_profile_url,
+                                        'homepage_url': '',
+                                        'keywords': extraction.keywords if extraction else [],
+                                        'evidence_snippets': []
+                                    }
+                                else:
+                                    st.error(f"Failed to extract profile: {failure_reason}")
+                                    st.info("You can still manually add the supervisor below.")
+                            except Exception as e2:
+                                st.error(f"Failed to extract profile: {failure_reason}")
+                                st.info("You can still manually add the supervisor below.")
+                except Exception as e:
+                    st.error(f"Error extracting profile: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        else:
+            st.warning("Please enter a profile URL")
+    
+    # Manual add form
+    st.markdown("**Or Add Manually**")
+    if st.button("📝 Add Manually", use_container_width=True, key="manual_add_btn"):
+        st.session_state['show_add_form'] = True
+
 # Get total count
 conn, cursor = get_cursor()
 cursor.execute("SELECT COUNT(*) FROM supervisors")
@@ -66,6 +213,119 @@ query += " ORDER BY last_seen_at DESC LIMIT 100"
 conn, cursor = get_cursor()
 cursor.execute(query, params)
 rows = cursor.fetchall()
+
+# Add new supervisor form (if requested)
+if st.session_state.get('show_add_form') or st.session_state.get('extracted_profile'):
+    st.subheader("➕ Add New Supervisor")
+    with st.form("add_supervisor_form"):
+        # Pre-fill with extracted data if available
+        extracted = st.session_state.get('extracted_profile', {})
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            name = st.text_input("Name *", value=extracted.get('name', ''), key="add_name")
+            title = st.text_input("Title", value=extracted.get('title', ''), key="add_title")
+            institution = st.text_input("Institution *", value=extracted.get('institution', ''), key="add_institution")
+            domain = st.text_input("Domain", value=extracted.get('domain', ''), key="add_domain")
+            country = st.text_input("Country", value=extracted.get('country', ''), key="add_country")
+            region = st.text_input("Region", value=extracted.get('region', ''), key="add_region")
+        
+        with col2:
+            email = st.text_input("Email", value=extracted.get('email', ''), key="add_email")
+            email_confidence = st.selectbox(
+                "Email Confidence",
+                ["none", "low", "medium", "high"],
+                index=["none", "low", "medium", "high"].index(extracted.get('email_confidence', 'none')),
+                key="add_email_confidence"
+            )
+            profile_url = st.text_input("Profile URL *", value=extracted.get('profile_url', ''), key="add_profile_url")
+            homepage = st.text_input("Homepage", value=extracted.get('homepage_url', ''), key="add_homepage")
+            source_url = st.text_input("Source URL *", value=extracted.get('profile_url', ''), key="add_source_url")
+        
+        # Keywords
+        extracted_keywords = extracted.get('keywords', [])
+        keywords_text = st.text_area(
+            "Keywords (comma-separated)",
+            value=", ".join(extracted_keywords) if extracted_keywords else "",
+            key="add_keywords",
+            help="Comma-separated list of research keywords"
+        )
+        
+        # Evidence snippets
+        extracted_evidence = extracted.get('evidence_snippets', [])
+        evidence_text = st.text_area(
+            "Evidence Snippets (comma-separated)",
+            value=", ".join(extracted_evidence) if extracted_evidence else "",
+            key="add_evidence"
+        )
+        
+        # Submit button
+        col_submit1, col_submit2, col_submit3 = st.columns([1, 1, 2])
+        with col_submit1:
+            submitted = st.form_submit_button("✅ Add to Database", use_container_width=True)
+        with col_submit2:
+            cancel = st.form_submit_button("❌ Cancel", use_container_width=True)
+        
+        if submitted:
+            if not name or not institution or not profile_url:
+                st.error("Name, Institution, and Profile URL are required!")
+            else:
+                try:
+                    # Convert keywords and evidence to JSON
+                    keywords_list = [k.strip() for k in keywords_text.split(",") if k.strip()]
+                    evidence_list = [e.strip() for e in evidence_text.split(",") if e.strip()]
+                    
+                    # Import SupervisorProfile and upsert function
+                    from app.schemas import SupervisorProfile
+                    from app.modules.local_repo import upsert_supervisor
+                    
+                    # Create SupervisorProfile
+                    new_profile = SupervisorProfile(
+                        name=name,
+                        title=title if title else None,
+                        institution=institution,
+                        country=country if country else "",
+                        region=region if region else "",
+                        email=email if email else None,
+                        email_confidence=email_confidence,
+                        profile_url=profile_url,
+                        homepage_url=homepage if homepage else None,
+                        keywords=keywords_list,
+                        publications_links=[],
+                        scholar_search_url=None,
+                        fit_score=0.0,
+                        tier="Adjacent",
+                        source_url=source_url if source_url else profile_url,
+                        evidence_snippets=evidence_list,
+                        notes=None
+                    )
+                    
+                    # Save to database
+                    upsert_supervisor(new_profile, domain=domain if domain else None)
+                    
+                    # Clear session state
+                    if 'extracted_profile' in st.session_state:
+                        del st.session_state['extracted_profile']
+                    if 'show_add_form' in st.session_state:
+                        del st.session_state['show_add_form']
+                    
+                    st.success(f"✓ Successfully added supervisor: {name}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error adding supervisor: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+        
+        if cancel:
+            # Clear session state
+            if 'extracted_profile' in st.session_state:
+                del st.session_state['extracted_profile']
+            if 'show_add_form' in st.session_state:
+                del st.session_state['show_add_form']
+            st.rerun()
+    
+    st.divider()
 
 # Display supervisors
 st.subheader(f"Supervisors ({len(rows)} shown)")

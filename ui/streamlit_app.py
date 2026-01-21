@@ -682,14 +682,47 @@ else:
             status_text = st.empty()
             stats_text = st.empty()
             
-            # Progress callback function
+            # Progress callback function with aggressive keep-alive mechanism
+            # Designed to prevent timeout for tasks up to 1 hour
+            import time
+            from datetime import datetime
+            
+            # Track last update time for keep-alive
+            if 'last_progress_update' not in st.session_state:
+                st.session_state.last_progress_update = time.time()
+            
             def update_progress(step: str, progress: float, message: str, **kwargs):
-                """Update Streamlit progress display."""
+                """Update Streamlit progress display with aggressive keep-alive mechanism."""
+                current_time = time.time()
+                elapsed_time = current_time - st.session_state.last_progress_update
+                
+                # Update progress bar
                 progress_bar.progress(min(progress, 1.0))
-                status_text.info(f"📊 **Current Step:** {message}")
+                
+                # Add detailed timestamp to show connection is alive
+                timestamp = datetime.now().strftime("%H:%M:%S")
+                elapsed_minutes = int(elapsed_time // 60)
+                elapsed_seconds = int(elapsed_time % 60)
+                
+                # Enhanced status message with elapsed time
+                status_message = f"📊 **{timestamp}** - {message}"
+                if elapsed_time > 60:
+                    status_message += f" (Running: {elapsed_minutes}m {elapsed_seconds}s)"
+                status_text.info(status_message)
                 
                 if "found_count" in kwargs:
-                    stats_text.success(f"✅ **Progress:** Found {kwargs['found_count']} supervisors so far")
+                    stats_text.success(
+                        f"✅ **Progress:** Found {kwargs['found_count']} supervisors so far "
+                        f"| Last update: {timestamp} | Elapsed: {elapsed_minutes}m {elapsed_seconds}s"
+                    )
+                
+                # Aggressive keep-alive: Update session state to keep connection alive
+                st.session_state.last_progress_update = current_time
+                st.session_state.progress_step = step
+                st.session_state.progress_value = progress
+                
+                # Force Streamlit to process updates (critical for long-running tasks)
+                time.sleep(0.05)  # Slightly longer delay to ensure Streamlit processes
             
             try:
                 st.write("🔴 DEBUG: Entered try block")

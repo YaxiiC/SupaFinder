@@ -449,18 +449,53 @@ def run_pipeline(
         ) as progress:
             task = progress.add_task("Processing universities...", total=len(universities))
             
+            # Aggressive keep-alive mechanism: Track last progress update time
+            # Designed to prevent timeout for tasks up to 1 hour
+            import time
+            last_progress_update = time.time()
+            PROGRESS_UPDATE_INTERVAL = 5  # Update every 5 seconds (more frequent for 1-hour tasks)
+            last_heartbeat = time.time()
+            HEARTBEAT_INTERVAL = 3  # Send heartbeat every 3 seconds minimum
+            
             for idx, university in enumerate(universities):
                 progress.update(task, description=f"Processing {university.institution}...")
                 
-                # Update progress callback
+                current_time = time.time()
+                
+                # Aggressive keep-alive: Update more frequently
+                # Always update on first, last, and every N items
+                should_update = (
+                    (current_time - last_progress_update >= PROGRESS_UPDATE_INTERVAL) or 
+                    (idx == 0) or 
+                    (idx == len(universities) - 1) or
+                    (idx % 5 == 0)  # Update every 5 universities
+                )
+                
+                # Heartbeat: Send minimal update even if not full update
+                needs_heartbeat = (current_time - last_heartbeat >= HEARTBEAT_INTERVAL)
+                
                 if progress_callback:
-                    uni_progress = 0.50 + (idx / len(universities)) * 0.35
-                    progress_callback(
-                        "online_search", 
-                        uni_progress, 
-                        f"Processing {university.institution}... ({idx+1}/{len(universities)})",
-                        found_count=len(online_profiles)
-                    )
+                    if should_update:
+                        # Full progress update
+                        uni_progress = 0.50 + (idx / len(universities)) * 0.35
+                        progress_callback(
+                            "online_search", 
+                            uni_progress, 
+                            f"Processing {university.institution}... ({idx+1}/{len(universities)})",
+                            found_count=len(online_profiles)
+                        )
+                        last_progress_update = current_time
+                        last_heartbeat = current_time
+                    elif needs_heartbeat:
+                        # Minimal heartbeat to keep connection alive
+                        uni_progress = 0.50 + (idx / len(universities)) * 0.35
+                        progress_callback(
+                            "heartbeat", 
+                            uni_progress, 
+                            f"Processing {university.institution}... ({idx+1}/{len(universities)}) [Keep-alive]",
+                            found_count=len(online_profiles)
+                        )
+                        last_heartbeat = current_time
                 
                 try:
                     profiles, stats = process_university(university, research_profile)
@@ -474,14 +509,21 @@ def run_pipeline(
                     for reason, count in stats["dropped_reasons"].items():
                         total_dropped_reasons[reason] += count
                     
-                    # Update progress with found count
+                    # Additional keep-alive update after processing each university
+                    # This ensures connection stays alive even during slow processing
+                    # Only update if significant progress or enough time has passed
+                    current_time_after = time.time()
                     if progress_callback:
-                        progress_callback(
-                            "online_search",
-                            uni_progress,
-                            f"Found {len(online_profiles)} supervisors so far...",
-                            found_count=len(online_profiles)
-                        )
+                        # Update if we found profiles or enough time passed
+                        if len(profiles) > 0 or (current_time_after - last_heartbeat >= HEARTBEAT_INTERVAL * 2):
+                            uni_progress_after = 0.50 + ((idx + 1) / len(universities)) * 0.35
+                            progress_callback(
+                                "online_search",
+                                uni_progress_after,
+                                f"Processed {university.institution}... Found {len(online_profiles)} total supervisors ({idx+1}/{len(universities)})",
+                                found_count=len(online_profiles)
+                            )
+                            last_heartbeat = current_time_after
                     
                     # Early exit if we have enough
                     if len(online_profiles) >= need_count * 2:

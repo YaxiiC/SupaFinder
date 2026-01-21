@@ -1,0 +1,26 @@
+[server]
+# 增加上传文件大小限制 (MB) - 支持大文件上传
+maxUploadSize = 500
+# 启用 CORS（如果需要）
+enableCORS = false
+# 启用 XSRF 保护
+enableXsrfProtection = false
+# 增加消息大小限制（用于长时间运行的任务）
+maxMessageSize = 200
+
+[browser]
+# 不收集使用统计
+gatherUsageStats = false
+
+[runner]
+# 快速重载（开发模式）
+fastReruns = true
+# 魔法命令（允许在代码中使用魔法命令）
+magicEnabled = true
+# 允许长时间运行的任务（最多1小时）
+postScriptGC = false
+
+# 注意：Streamlit Cloud 可能不支持所有配置项
+# 某些配置可能需要在部署时通过环境变量设置
+# 对于超过1小时的任务，建议使用后台任务队列
+

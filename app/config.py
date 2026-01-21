@@ -86,6 +86,23 @@ REQUEST_TIMEOUT = 30
 # Example: DEVELOPER_EMAILS=dev@example.com,admin@example.com
 DEVELOPER_EMAILS = [e.strip().lower() for e in os.getenv("DEVELOPER_EMAILS", "").split(",") if e.strip()]
 
+# Beta users - get free searches before requiring subscription
+# Format: "email1@example.com:10,email2@example.com:10" (email:free_searches,email:free_searches)
+# Each beta user gets the specified number of free searches (default: 10)
+BETA_USERS_CONFIG = get_secret("BETA_USERS", "")
+BETA_USERS = {}  # {email: free_searches_count}
+if BETA_USERS_CONFIG:
+    for entry in BETA_USERS_CONFIG.split(","):
+        entry = entry.strip()
+        if ":" in entry:
+            email, count = entry.split(":", 1)
+            email = email.strip().lower()
+            try:
+                count = int(count.strip())
+                BETA_USERS[email] = count
+            except ValueError:
+                pass  # Skip invalid entries
+
 # Ensure directories exist
 DATA_DIR.mkdir(exist_ok=True)
 OUTPUTS_DIR.mkdir(exist_ok=True)

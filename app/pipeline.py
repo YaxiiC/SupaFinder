@@ -256,6 +256,10 @@ def run_pipeline(
             raise ValueError(error_msg or "Cannot perform search. Please check your subscription.")
         if subscription_info and subscription_info['type'] == 'developer':
             console.print(f"[bold green]Developer Mode: Unlimited access[/bold green]")
+        elif subscription_info and subscription_info['type'] == 'beta':
+            console.print(f"[cyan]Beta User: {subscription_info['remaining_searches']} free searches remaining[/cyan]")
+            subscription_type = 'beta'
+            is_free_user = False  # Beta users can still subscribe
         else:
             subscription_type = subscription_info['type'] if subscription_info else 'unknown'
             is_free_user = (subscription_type == 'free')
@@ -682,8 +686,8 @@ def run_pipeline(
                 "result_count": len(final_profiles)
             }
         )
-        # Get updated subscription info (skip for developers)
-        if subscription_info['type'] != 'developer':
+        # Get updated subscription info (skip for developers and beta users using free searches)
+        if subscription_info['type'] not in ['developer', 'beta']:
             from app.modules.subscription import get_user_subscription
             updated_sub = get_user_subscription(user_id)
             if updated_sub:

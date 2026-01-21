@@ -135,9 +135,16 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 id SERIAL PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login_at TIMESTAMP
+                last_login_at TIMESTAMP,
+                beta_free_searches_remaining INTEGER DEFAULT NULL
             )
         """)
+        
+        # Add beta_free_searches_remaining column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS beta_free_searches_remaining INTEGER DEFAULT NULL")
+        except Exception:
+            pass  # Column might already exist
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (
@@ -235,9 +242,16 @@ def init_db(db_path: Optional[Path] = None) -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL,
                 created_at TEXT NOT NULL,
-                last_login_at TEXT
+                last_login_at TEXT,
+                beta_free_searches_remaining INTEGER DEFAULT NULL
             )
         """)
+        
+        # Add beta_free_searches_remaining column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN beta_free_searches_remaining INTEGER DEFAULT NULL")
+        except Exception:
+            pass  # Column might already exist
         
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS subscriptions (

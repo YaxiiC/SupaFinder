@@ -54,11 +54,32 @@ with st.sidebar:
         st.success(f"Logged in as: {st.session_state.user_email}")
         
         # Check if developer
-        from app.modules.subscription import get_user_subscription, is_developer
+        from app.modules.subscription import get_user_subscription, is_developer, is_beta_user, get_beta_free_searches_remaining
         is_dev = is_developer(st.session_state.user_email)
+        is_beta = is_beta_user(st.session_state.user_email)
         
         if is_dev:
             st.success("🔧 **Developer Mode** - Unlimited access")
+        elif is_beta:
+            # Check beta user status
+            beta_searches = get_beta_free_searches_remaining(st.session_state.user_id)
+            if beta_searches is not None and beta_searches > 0:
+                st.info(f"🧪 **Beta User** - {beta_searches} free searches remaining")
+            else:
+                st.warning("🧪 **Beta User** - Free searches used up")
+            
+            # Also show subscription if they have one
+            subscription = get_user_subscription(st.session_state.user_id)
+            if subscription:
+                st.subheader("📊 Subscription")
+                st.write(f"**Plan:** {subscription['type'].title()}")
+                st.write(f"**Remaining searches:** {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                
+                from datetime import datetime
+                expires_at = subscription['expires_at']
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at)
+                st.write(f"**Expires:** {expires_at.strftime('%Y-%m-%d')}")
         else:
             # Get subscription info
             subscription = get_user_subscription(st.session_state.user_id)

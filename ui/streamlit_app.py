@@ -283,21 +283,30 @@ else:
                     # Import and run pipeline
                     from app.pipeline import run_pipeline
                     from app.db_cloud import init_db
+                    import inspect
                     init_db()
                     
-                    run_pipeline(
-                        cv_path=cv_path,
-                        keywords=keywords.strip() if keywords else None,
-                        universities_path=uni_path,
-                        output_path=output_path,
-                        regions=regions_list,
-                        countries=countries_list,
-                        qs_max=qs_max if qs_max else None,
-                        target=target,
-                        local_first=local_first,
-                        user_id=st.session_state.user_id,
-                        progress_callback=update_progress
-                    )
+                    # Check if run_pipeline accepts progress_callback parameter
+                    # This provides compatibility if Streamlit Cloud hasn't updated yet
+                    sig = inspect.signature(run_pipeline)
+                    kwargs = {
+                        "cv_path": cv_path,
+                        "keywords": keywords.strip() if keywords else None,
+                        "universities_path": uni_path,
+                        "output_path": output_path,
+                        "regions": regions_list,
+                        "countries": countries_list,
+                        "qs_max": qs_max if qs_max else None,
+                        "target": target,
+                        "local_first": local_first,
+                        "user_id": st.session_state.user_id,
+                    }
+                    
+                    # Only add progress_callback if the function accepts it
+                    if "progress_callback" in sig.parameters:
+                        kwargs["progress_callback"] = update_progress
+                    
+                    run_pipeline(**kwargs)
                     
                     # Clear progress indicators
                     progress_bar.progress(1.0)

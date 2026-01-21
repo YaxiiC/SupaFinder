@@ -651,7 +651,8 @@ else:
         
         col_a, col_b = st.columns(2)
         with col_a:
-            qs_max = st.number_input("Max QS Rank", min_value=1, max_value=1000, value=100)
+            qs_min = st.number_input("Min QS Rank", min_value=1, max_value=1000, value=1, help="Minimum QS World University Ranking")
+            qs_max = st.number_input("Max QS Rank", min_value=1, max_value=1000, value=100, help="Maximum QS World University Ranking")
         with col_b:
             target = st.number_input("Target Supervisors", min_value=10, max_value=500, value=100)
         
@@ -752,6 +753,11 @@ else:
                         st.write(f"🔴 DEBUG: Subscription check passed. Remaining: {sub_info.get('remaining_searches', 'N/A')}")
                         status_text.info(f"✅ Subscription check passed. Remaining searches: {sub_info.get('remaining_searches', 'N/A')}")
                     
+                    # Validate QS rank range
+                    if qs_min and qs_max and qs_min > qs_max:
+                        st.error("❌ Min QS Rank must be less than or equal to Max QS Rank")
+                        st.stop()
+                    
                     # Check if run_pipeline accepts progress_callback parameter
                     # This provides compatibility if Streamlit Cloud hasn't updated yet
                     st.write("🔴 DEBUG: Preparing pipeline arguments...")
@@ -763,6 +769,7 @@ else:
                         "output_path": output_path,
                         "regions": regions_list,
                         "countries": countries_list,
+                        "qs_min": qs_min if qs_min else None,
                         "qs_max": qs_max if qs_max else None,
                         "target": target,
                         "local_first": local_first,

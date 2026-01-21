@@ -513,15 +513,15 @@ else:
                         st.error(f"Universities template not found at {uni_path}")
                         st.stop()
                     
-                # Save uploaded CV to temp directory if provided
+                    # Save uploaded CV to temp directory if provided
                     with tempfile.TemporaryDirectory() as tmpdir:
                         tmpdir = Path(tmpdir)
                         
-                    # Save CV if provided
-                    cv_path = None
-                    if cv_file:
-                        cv_path = tmpdir / cv_file.name
-                        cv_path.write_bytes(cv_file.read())
+                        # Save CV if provided
+                        cv_path = None
+                        if cv_file:
+                            cv_path = tmpdir / cv_file.name
+                            cv_path.write_bytes(cv_file.read())
                         
                         # Output path
                         output_path = tmpdir / "supervisors.xlsx"
@@ -575,15 +575,15 @@ else:
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                     use_container_width=True
                                 )
-                        st.success("✅ Pipeline completed successfully!")
-                        
-                        # Show updated subscription info
-                        from app.modules.subscription import get_user_subscription
-                        subscription = get_user_subscription(st.session_state.user_id)
-                        if subscription:
-                            st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
-                    else:
-                        st.error("No output file generated")
+                            st.success("✅ Pipeline completed successfully!")
+                            
+                            # Show updated subscription info
+                            from app.modules.subscription import get_user_subscription
+                            subscription = get_user_subscription(st.session_state.user_id)
+                            if subscription:
+                                st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                        else:
+                            st.error("No output file generated")
                             
                 except ValueError as e:
                     # Subscription-related errors

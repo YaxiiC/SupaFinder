@@ -165,7 +165,7 @@ if st.session_state.get("show_subscription_page"):
     
     with col1:
         st.markdown("### 👤 Individual Plan")
-        st.write(f"**${PLANS['individual']['price_usd']}/month**")
+        st.write(f"**£{PLANS['individual']['price_usd']}/month**")
         st.write(f"- {PLANS['individual']['searches_per_month']} searches per month")
         st.write("- Perfect for personal use")
         
@@ -253,7 +253,7 @@ if st.session_state.get("show_subscription_page"):
     
     with col2:
         st.markdown("### 🏢 Enterprise Plan")
-        st.write(f"**${PLANS['enterprise']['price_usd']}/month**")
+        st.write(f"**£{PLANS['enterprise']['price_usd']}/month**")
         st.write(f"- {PLANS['enterprise']['searches_per_month']} searches per month")
         st.write("- Ideal for teams and organizations")
         

@@ -16,12 +16,12 @@ PLANS = {
     },
     "individual": {
         "searches_per_month": 3,
-        "price_usd": 25,
+        "price_usd": 16,  # Price in GBP: £16
         "name": "Individual Monthly"
     },
     "enterprise": {
         "searches_per_month": 10,
-        "price_usd": 55,
+        "price_usd": 48,  # Price in GBP: £48
         "name": "Enterprise Monthly"
     }
 }

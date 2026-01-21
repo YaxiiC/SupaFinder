@@ -113,52 +113,6 @@ with st.sidebar:
     else:
         st.info("Please log in to use the service")
         
-        # Google OAuth - Temporarily disabled
-        # Uncomment the code below to enable Google OAuth
-        """
-        # Check if Google OAuth is configured
-        from app.config import get_secret
-        from app.modules.google_oauth import get_google_oauth_url, exchange_code_for_token, get_user_info
-        
-        google_client_id = get_secret("GOOGLE_OAUTH_CLIENT_ID", "")
-        google_oauth_configured = bool(google_client_id)
-        
-        # Handle Google OAuth callback
-        if "code" in st.query_params and google_oauth_configured:
-            code = st.query_params["code"]
-            token_data = exchange_code_for_token(code)
-            
-            if token_data and "access_token" in token_data:
-                access_token = token_data["access_token"]
-                user_info = get_user_info(access_token)
-                
-                if user_info:
-                    email = user_info.get("email", "").lower().strip()
-                    
-                    if email:
-                        try:
-                            from app.modules.subscription import get_or_create_user
-                            from app.db_cloud import init_db
-                            init_db()
-                            user_id = get_or_create_user(email)
-                            st.session_state.user_email = email
-                            st.session_state.user_id = user_id
-                            # Clear query params
-                            st.query_params.clear()
-                            st.success("Logged in successfully with Google!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-        
-        # Google OAuth Login Button
-        if google_oauth_configured:
-            auth_url = get_google_oauth_url()
-            if auth_url:
-                st.markdown(f'<a href="{auth_url}" target="_self"><button style="width:100%; padding:10px; background-color:#4285F4; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer;">🔵 Login with Google</button></a>', unsafe_allow_html=True)
-                st.divider()
-                st.caption("Or login with email and password")
-        """
-        
         # Email/Password Login
         login_tab, register_tab = st.tabs(["Login", "Register"])
         

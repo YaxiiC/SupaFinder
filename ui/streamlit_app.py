@@ -1,4 +1,4 @@
-"""Streamlit UI for PhD Supervisor Finder with subscription support."""
+"""Streamlit UI for SupaFinder with subscription support."""
 
 import streamlit as st
 import tempfile
@@ -11,6 +11,181 @@ import os
 project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+# Custom CSS for light pink/blue theme
+st.markdown("""
+<style>
+    /* Main theme colors - Light Pink and Blue */
+    :root {
+        --primary-color: #FFB6C1;  /* Light Pink */
+        --secondary-color: #ADD8E6; /* Light Blue */
+        --accent-color: #FF69B4;    /* Hot Pink */
+        --text-color: #2C3E50;      /* Dark Gray */
+        --bg-color: #FFF5F8;        /* Very Light Pink */
+    }
+    
+    /* Main container */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* Headers */
+    h1 {
+        color: #FF69B4 !important;
+        font-weight: 700 !important;
+    }
+    
+    h2 {
+        color: #4169E1 !important;
+        font-weight: 600 !important;
+    }
+    
+    h3 {
+        color: #6495ED !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #FFE4E1 0%, #E0F6FF 100%);
+    }
+    
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        color: #2C3E50;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background: linear-gradient(90deg, #FFB6C1 0%, #ADD8E6 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #FF69B4 0%, #87CEEB 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    /* Primary button */
+    button[kind="primary"] {
+        background: linear-gradient(90deg, #FF69B4 0%, #4169E1 100%) !important;
+        color: white !important;
+    }
+    
+    button[kind="primary"]:hover {
+        background: linear-gradient(90deg, #FF1493 0%, #1E90FF 100%) !important;
+    }
+    
+    /* Text inputs */
+    .stTextInput > div > div > input {
+        border: 2px solid #FFB6C1;
+        border-radius: 8px;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #4169E1;
+        box-shadow: 0 0 0 3px rgba(65, 105, 225, 0.1);
+    }
+    
+    /* Text areas */
+    .stTextArea > div > div > textarea {
+        border: 2px solid #FFB6C1;
+        border-radius: 8px;
+    }
+    
+    .stTextArea > div > div > textarea:focus {
+        border-color: #4169E1;
+        box-shadow: 0 0 0 3px rgba(65, 105, 225, 0.1);
+    }
+    
+    /* File uploader */
+    .stFileUploader {
+        border: 2px dashed #ADD8E6;
+        border-radius: 10px;
+        padding: 1rem;
+        background: #F0F8FF;
+    }
+    
+    /* Info boxes */
+    .stInfo {
+        background: linear-gradient(90deg, #E0F6FF 0%, #FFE4E1 100%);
+        border-left: 4px solid #4169E1;
+        border-radius: 8px;
+    }
+    
+    /* Success messages */
+    .stSuccess {
+        background: linear-gradient(90deg, #E0FFE0 0%, #E0F6FF 100%);
+        border-left: 4px solid #32CD32;
+    }
+    
+    /* Warning messages */
+    .stWarning {
+        background: linear-gradient(90deg, #FFF8DC 0%, #FFE4E1 100%);
+        border-left: 4px solid #FFA500;
+    }
+    
+    /* Error messages */
+    .stError {
+        background: linear-gradient(90deg, #FFE4E1 0%, #FFB6C1 100%);
+        border-left: 4px solid #FF1493;
+    }
+    
+    /* Dividers */
+    hr {
+        border: none;
+        height: 2px;
+        background: linear-gradient(90deg, #FFB6C1 0%, #ADD8E6 100%);
+        margin: 2rem 0;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: #FFE4E1;
+        border-radius: 8px 8px 0 0;
+        padding: 0.5rem 1rem;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(90deg, #FFB6C1 0%, #ADD8E6 100%);
+        color: white;
+    }
+    
+    /* Progress bar */
+    .stProgress > div > div > div {
+        background: linear-gradient(90deg, #FF69B4 0%, #4169E1 100%);
+    }
+    
+    /* Metrics */
+    [data-testid="stMetricValue"] {
+        color: #FF69B4;
+        font-weight: 700;
+    }
+    
+    /* Expander */
+    .streamlit-expanderHeader {
+        background: #F0F8FF;
+        border-radius: 8px;
+        color: #4169E1;
+    }
+    
+    /* Caption */
+    .stCaption {
+        color: #6495ED;
+        font-style: italic;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if "user_email" not in st.session_state:
@@ -41,8 +216,8 @@ if "payment" in st.query_params and st.query_params["payment"] == "success":
             st.error(f"Payment processing error: {e}")
 
 st.set_page_config(
-    page_title="PhD Supervisor Finder",
-    page_icon="🎓",
+    page_title="SupaFinder",
+    page_icon="🔍",
     layout="wide"
 )
 
@@ -435,7 +610,7 @@ elif st.session_state.get("show_history_page"):
 
 else:
     # Main search interface
-    st.title("🎓 PhD Supervisor Finder")
+    st.title("🔍 SupaFinder")
     st.markdown("*AI-assisted PhD supervisor discovery*")
     
     if not st.session_state.user_email:
@@ -643,4 +818,4 @@ else:
                 st.code(traceback.format_exc())
     
     st.divider()
-    st.caption("PhD Supervisor Finder • LLM-first approach using DeepSeek")
+    st.caption("SupaFinder • AI-powered PhD supervisor discovery")

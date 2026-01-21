@@ -176,12 +176,28 @@ if st.session_state.get("show_subscription_page"):
             if st.button("💳 Subscribe with Payment - Individual", key="subscribe_individual", use_container_width=True):
                 try:
                     import urllib.parse
+                    from app.config import get_secret
                     
-                    # Get current URL for redirect
-                    # In Streamlit Cloud, we'll use a success page
-                    base_url = st.get_option("server.baseUrlPath") or ""
-                    success_url = f"{base_url}?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
-                    cancel_url = f"{base_url}?payment=cancelled"
+                    # Get current URL for redirect - must be full URL
+                    # Option 1: From Streamlit Secrets (recommended)
+                    app_url = get_secret("APP_URL", "")
+                    
+                    # Option 2: Try to construct from environment
+                    if not app_url:
+                        # Try to get from Streamlit config
+                        try:
+                            server_name = st.get_option("server.headless")  # Not ideal, try other methods
+                            # Fall back to constructing from known Streamlit Cloud pattern
+                            # User should set APP_URL in secrets
+                            app_url = "https://supafinder.streamlit.app"
+                        except:
+                            app_url = "https://supafinder.streamlit.app"
+                    
+                    # Ensure URL doesn't end with /
+                    app_url = app_url.rstrip('/')
+                    
+                    success_url = f"{app_url}/?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
+                    cancel_url = f"{app_url}/?payment=cancelled"
                     
                     session = create_checkout_session(
                         user_email=st.session_state.user_email,
@@ -248,11 +264,22 @@ if st.session_state.get("show_subscription_page"):
             if st.button("💳 Subscribe with Payment - Enterprise", key="subscribe_enterprise", use_container_width=True):
                 try:
                     import urllib.parse
+                    from app.config import get_secret
                     
-                    # Get current URL for redirect
-                    base_url = st.get_option("server.baseUrlPath") or ""
-                    success_url = f"{base_url}?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
-                    cancel_url = f"{base_url}?payment=cancelled"
+                    # Get current URL for redirect - must be full URL
+                    # Option 1: From Streamlit Secrets (recommended)
+                    app_url = get_secret("APP_URL", "")
+                    
+                    # Option 2: Try to construct from environment
+                    if not app_url:
+                        # Fall back to constructing from known Streamlit Cloud pattern
+                        app_url = "https://supafinder.streamlit.app"
+                    
+                    # Ensure URL doesn't end with /
+                    app_url = app_url.rstrip('/')
+                    
+                    success_url = f"{app_url}/?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
+                    cancel_url = f"{app_url}/?payment=cancelled"
                     
                     session = create_checkout_session(
                         user_email=st.session_state.user_email,

@@ -55,6 +55,9 @@
 3. 添加以下配置：
 
 ```toml
+# App URL (必需 - 用于支付成功后的重定向)
+APP_URL = "https://supafinder.streamlit.app"
+
 # Stripe API Keys
 STRIPE_SECRET_KEY = "sk_test_你的Secret_Key"
 STRIPE_PUBLISHABLE_KEY = "pk_test_你的Publishable_Key"
@@ -66,6 +69,8 @@ STRIPE_PRICE_ID_ENTERPRISE = "price_1XYZ789..."
 # Webhook Secret (可选，用于处理支付回调)
 STRIPE_WEBHOOK_SECRET = "whsec_你的Webhook_Secret"
 ```
+
+**重要**：`APP_URL` 必须是你的 Streamlit Cloud 应用的完整 URL（例如：`https://supafinder.streamlit.app`）。这个 URL 用于支付成功后重定向回应用。
 
 ### 步骤 5: 本地开发配置（可选）
 

@@ -230,12 +230,15 @@ def run_pipeline(
     qs_max: Optional[int] = None,
     target: int = TARGET_SUPERVISORS,
     local_first: bool = True,
-    user_id: Optional[int] = None
+    user_id: Optional[int] = None,
+    progress_callback: Optional[callable] = None
 ) -> None:
     """Run the full supervisor discovery pipeline.
     
     Args:
         user_id: Optional user ID for subscription tracking. If None, subscription checks are skipped (CLI mode).
+        progress_callback: Optional callback function for progress updates. 
+                          Should accept (step: str, progress: float, message: str, **kwargs)
     """
     
     # Initialize database tables if they don't exist
@@ -264,8 +267,12 @@ def run_pipeline(
     
     # Step 1: Load inputs
     console.print("[yellow]Loading inputs...[/yellow]")
+    if progress_callback:
+        progress_callback("loading", 0.05, "Loading universities...")
     universities = load_universities(universities_path)
     initial_count = len(universities)
+    if progress_callback:
+        progress_callback("loading", 0.10, f"Loaded {initial_count} universities")
     
     # Filter by region
     if regions:
@@ -320,17 +327,25 @@ def run_pipeline(
     cv_key_sections = ""
     if cv_path:
         console.print("[yellow]Analyzing CV...[/yellow]")
+        if progress_callback:
+            progress_callback("cv_analysis", 0.15, "Analyzing CV...")
         cv_full_text = parse_cv(cv_path)
         # Extract only key sections to reduce token usage
         cv_key_sections = cv_extractor.extract_key_sections(cv_full_text, max_length=3000)
         console.print(f"  Extracted key sections ({len(cv_key_sections)} chars)")
     else:
         console.print("[yellow]No CV provided, using keywords only...[/yellow]")
+        if progress_callback:
+            progress_callback("cv_analysis", 0.15, "Using keywords only...")
     
     # Normalize keywords to empty string if None
     keywords_text = keywords.strip() if keywords else ""
     
+    if progress_callback:
+        progress_callback("keywords", 0.20, "Extracting research profile from CV/keywords...")
     research_profile = llm_client.cv_to_research_profile(cv_key_sections, keywords_text)
+    if progress_callback:
+        progress_callback("keywords", 0.25, f"Extracted {len(research_profile.core_keywords)} core keywords")
     
     # Print extracted keywords for search
     console.print(f"\n[yellow]Extracted keywords for search:[/yellow]")
@@ -347,6 +362,8 @@ def run_pipeline(
     
     if local_first:
         console.print("[yellow]Retrieving from local database...[/yellow]")
+        if progress_callback:
+            progress_callback("local_db", 0.30, "Searching local database...")
         constraints = {}
         if regions:
             constraints["regions"] = regions
@@ -361,6 +378,8 @@ def run_pipeline(
         
         local_candidates = retrieve_local_candidates(research_profile, constraints, limit=800, universities=universities)
         console.print(f"  Found {len(local_candidates)} candidates in local database")
+        if progress_callback:
+            progress_callback("local_db", 0.40, f"Found {len(local_candidates)} candidates in local database")
         
         # If no candidates found, provide diagnostic information
         if len(local_candidates) == 0:
@@ -383,11 +402,15 @@ def run_pipeline(
         local_hit_count = len(selected_local)
         all_profiles.extend(selected_local)
         console.print(f"  Selected {local_hit_count} from local database")
+        if progress_callback:
+            progress_callback("local_db", 0.45, f"Selected {local_hit_count} supervisors from local database")
     
     # Step 4: Online search if needed
     need_count = target - len(all_profiles)
     if need_count > 0:
         console.print(f"[yellow]Need {need_count} more supervisors, searching online...[/yellow]")
+        if progress_callback:
+            progress_callback("online_search", 0.50, f"Need {need_count} more supervisors, searching online...")
         
         online_profiles: List[SupervisorProfile] = []
         
@@ -418,8 +441,18 @@ def run_pipeline(
                 "other": 0
             }
             
-            for university in universities:
+            for idx, university in enumerate(universities):
                 progress.update(task, description=f"Processing {university.institution}...")
+                
+                # Update progress callback
+                if progress_callback:
+                    uni_progress = 0.50 + (idx / len(universities)) * 0.35
+                    progress_callback(
+                        "online_search", 
+                        uni_progress, 
+                        f"Processing {university.institution}... ({idx+1}/{len(universities)})",
+                        found_count=len(online_profiles)
+                    )
                 
                 try:
                     profiles, stats = process_university(university, research_profile)
@@ -433,9 +466,25 @@ def run_pipeline(
                     for reason, count in stats["dropped_reasons"].items():
                         total_dropped_reasons[reason] += count
                     
+                    # Update progress with found count
+                    if progress_callback:
+                        progress_callback(
+                            "online_search",
+                            uni_progress,
+                            f"Found {len(online_profiles)} supervisors so far...",
+                            found_count=len(online_profiles)
+                        )
+                    
                     # Early exit if we have enough
                     if len(online_profiles) >= need_count * 2:
                         console.print(f"  [green]Collected enough candidates ({len(online_profiles)})[/green]")
+                        if progress_callback:
+                            progress_callback(
+                                "online_search",
+                                0.85,
+                                f"Collected enough candidates ({len(online_profiles)})",
+                                found_count=len(online_profiles)
+                            )
                         break
                 except Exception as e:
                     console.print(f"  [red]Error processing {university.institution}: {e}[/red]")
@@ -444,6 +493,8 @@ def run_pipeline(
         
         # Validate and deduplicate online profiles
         console.print("[yellow]Validating and deduplicating online profiles...[/yellow]")
+        if progress_callback:
+            progress_callback("validation", 0.86, f"Validating {len(online_profiles)} profiles...")
         valid_online = []
         validation_dropped = 0
         for p in online_profiles:
@@ -456,6 +507,8 @@ def run_pipeline(
         
         unique_online = deduplicate_profiles(valid_online)
         console.print(f"  {len(unique_online)} unique valid online profiles (dropped {validation_dropped} during validation)")
+        if progress_callback:
+            progress_callback("validation", 0.90, f"Validated: {len(unique_online)} unique profiles")
         
         # Score online profiles and filter out irrelevant ones
         scored_online = []
@@ -565,6 +618,8 @@ def run_pipeline(
     
     # Step 5: Final deduplication and selection with diversity
     console.print("[yellow]Final deduplication and ranking...[/yellow]")
+    if progress_callback:
+        progress_callback("final_selection", 0.92, f"Final selection from {len(all_profiles)} candidates...")
     unique_profiles = deduplicate_profiles(all_profiles)
     
     # Apply diversity constraints based on subscription type
@@ -581,10 +636,16 @@ def run_pipeline(
     institutions_in_results = len(set(p.institution.lower().strip() if p.institution else "" for p in final_profiles))
     console.print(f"  Selected {len(final_profiles)} supervisors ({core_count} Core, {len(final_profiles) - core_count} Adjacent)")
     console.print(f"  From {institutions_in_results} different institutions")
+    if progress_callback:
+        progress_callback("final_selection", 0.96, f"Selected {len(final_profiles)} final supervisors")
     
     # Step 6: Export
     console.print("[yellow]Exporting to Excel...[/yellow]")
+    if progress_callback:
+        progress_callback("export", 0.98, "Exporting to Excel...")
     export_to_excel(final_profiles, output_path)
+    if progress_callback:
+        progress_callback("export", 1.0, f"Done! {len(final_profiles)} supervisors exported")
     
     # Print final statistics summary
     console.print()

@@ -238,72 +238,91 @@ else:
         elif not cv_file and not keywords:
             st.error("Please upload a CV or enter research keywords (at least one is required)")
         else:
-            with st.spinner("Running supervisor discovery pipeline..."):
-                try:
-                    # Use built-in universities template
-                    from app.config import DATA_DIR
-                    uni_path = DATA_DIR / "universities_template.xlsx"
+            # Create progress tracking components
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            stats_text = st.empty()
+            
+            # Progress callback function
+            def update_progress(step: str, progress: float, message: str, **kwargs):
+                """Update Streamlit progress display."""
+                progress_bar.progress(min(progress, 1.0))
+                status_text.info(f"📊 **Current Step:** {message}")
+                
+                if "found_count" in kwargs:
+                    stats_text.success(f"✅ **Progress:** Found {kwargs['found_count']} supervisors so far")
+            
+            try:
+                # Use built-in universities template
+                from app.config import DATA_DIR
+                uni_path = DATA_DIR / "universities_template.xlsx"
+                
+                if not uni_path.exists():
+                    st.error(f"Universities template not found at {uni_path}")
+                    st.stop()
+                
+                # Save uploaded CV to temp directory if provided
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmpdir = Path(tmpdir)
                     
-                    if not uni_path.exists():
-                        st.error(f"Universities template not found at {uni_path}")
-                        st.stop()
+                    # Save CV if provided
+                    cv_path = None
+                    if cv_file:
+                        cv_path = tmpdir / cv_file.name
+                        cv_path.write_bytes(cv_file.read())
                     
-                    # Save uploaded CV to temp directory if provided
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        tmpdir = Path(tmpdir)
+                    # Output path
+                    output_path = tmpdir / "supervisors.xlsx"
+                    
+                    # Parse regions
+                    regions_list = [r.strip() for r in regions.split(",")] if regions else None
+                    
+                    # Parse countries
+                    countries_list = [c.strip() for c in countries.split(",")] if countries else None
+                    
+                    # Import and run pipeline
+                    from app.pipeline import run_pipeline
+                    from app.db_cloud import init_db
+                    init_db()
+                    
+                    run_pipeline(
+                        cv_path=cv_path,
+                        keywords=keywords.strip() if keywords else None,
+                        universities_path=uni_path,
+                        output_path=output_path,
+                        regions=regions_list,
+                        countries=countries_list,
+                        qs_max=qs_max if qs_max else None,
+                        target=target,
+                        local_first=local_first,
+                        user_id=st.session_state.user_id,
+                        progress_callback=update_progress
+                    )
+                    
+                    # Clear progress indicators
+                    progress_bar.progress(1.0)
+                    status_text.empty()
+                    stats_text.empty()
+                    
+                    # Read output and provide download
+                    if output_path.exists():
+                        with open(output_path, "rb") as f:
+                            st.download_button(
+                                label="📥 Download Results (Excel)",
+                                data=f.read(),
+                                file_name="supervisors.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        st.success("✅ Pipeline completed successfully!")
                         
-                        # Save CV if provided
-                        cv_path = None
-                        if cv_file:
-                            cv_path = tmpdir / cv_file.name
-                            cv_path.write_bytes(cv_file.read())
-                        
-                        # Output path
-                        output_path = tmpdir / "supervisors.xlsx"
-                        
-                        # Parse regions
-                        regions_list = [r.strip() for r in regions.split(",")] if regions else None
-                        
-                        # Parse countries
-                        countries_list = [c.strip() for c in countries.split(",")] if countries else None
-                        
-                        # Import and run pipeline
-                        from app.pipeline import run_pipeline
-                        from app.db_cloud import init_db
-                        init_db()
-                        
-                        run_pipeline(
-                            cv_path=cv_path,
-                            keywords=keywords.strip() if keywords else None,
-                            universities_path=uni_path,
-                            output_path=output_path,
-                            regions=regions_list,
-                            countries=countries_list,
-                            qs_max=qs_max if qs_max else None,
-                            target=target,
-                            local_first=local_first,
-                            user_id=st.session_state.user_id
-                        )
-                        
-                        # Read output and provide download
-                        if output_path.exists():
-                            with open(output_path, "rb") as f:
-                                st.download_button(
-                                    label="📥 Download Results (Excel)",
-                                    data=f.read(),
-                                    file_name="supervisors.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    use_container_width=True
-                                )
-                            st.success("Pipeline completed successfully!")
-                            
-                            # Show updated subscription info
-                            from app.modules.subscription import get_user_subscription
-                            subscription = get_user_subscription(st.session_state.user_id)
-                            if subscription:
-                                st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
-                        else:
-                            st.error("No output file generated")
+                        # Show updated subscription info
+                        from app.modules.subscription import get_user_subscription
+                        subscription = get_user_subscription(st.session_state.user_id)
+                        if subscription:
+                            st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                    else:
+                        st.error("No output file generated")
                             
                 except ValueError as e:
                     # Subscription-related errors

@@ -34,8 +34,12 @@ def update_remaining_searches(email: str, remaining_searches: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    db_type = os.getenv("DB_TYPE", "sqlite").lower()
+    # Use get_secret to support both local env and Streamlit secrets
+    from app.config import get_secret
+    db_type = get_secret("DB_TYPE", "sqlite").lower()
     now = datetime.now()
+    
+    print(f"   Database type: {db_type}")
     
     if db_type == "postgresql":
         cursor.execute(
@@ -89,10 +93,16 @@ if __name__ == "__main__":
     parser.add_argument("email", help="User email address")
     parser.add_argument("--remaining", type=int, help="Set remaining searches (e.g., 999)")
     parser.add_argument("--check-dev", action="store_true", help="Check if email is configured as developer")
+    parser.add_argument("--db-type", choices=["sqlite", "postgresql"], help="Force database type (default: auto-detect)")
     
     args = parser.parse_args()
     
     email = args.email.lower().strip()
+    
+    # Override DB_TYPE if specified
+    if args.db_type:
+        os.environ["DB_TYPE"] = args.db_type
+        print(f"Using database type: {args.db_type}")
     
     if args.check_dev:
         check_developer_mode(email)
@@ -117,4 +127,12 @@ if __name__ == "__main__":
             print(f"  Searches per month: {subscription['searches_per_month']}")
         else:
             print("No active subscription found.")
+        
+        # Show database info
+        from app.config import get_secret
+        db_type = get_secret("DB_TYPE", "sqlite").lower()
+        print(f"\nDatabase: {db_type}")
+        if db_type == "postgresql":
+            db_host = get_secret("DB_HOST", "not set")
+            print(f"  Host: {db_host}")
 

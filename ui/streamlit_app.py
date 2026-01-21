@@ -18,6 +18,28 @@ if "user_email" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
 
+# Handle payment success callback
+if "payment" in st.query_params and st.query_params["payment"] == "success":
+    session_id = st.query_params.get("session_id")
+    if session_id:
+        try:
+            from app.modules.payment import handle_payment_success
+            from app.modules.subscription import create_subscription
+            from app.db_cloud import init_db
+            
+            payment_info = handle_payment_success(session_id)
+            subscription_type = payment_info.get('metadata', {}).get('subscription_type')
+            
+            if subscription_type and st.session_state.user_id:
+                init_db()
+                subscription_id = create_subscription(st.session_state.user_id, subscription_type)
+                st.success("✅ Payment successful! Subscription activated.")
+                # Clear query params
+                st.query_params.clear()
+                st.rerun()
+        except Exception as e:
+            st.error(f"Payment processing error: {e}")
+
 st.set_page_config(
     page_title="PhD Supervisor Finder",
     page_icon="🎓",
@@ -126,15 +148,64 @@ if st.session_state.get("show_subscription_page"):
         st.write(f"- {PLANS['individual']['searches_per_month']} searches per month")
         st.write("- Perfect for personal use")
         
-        if st.button("Subscribe - Individual", key="subscribe_individual", use_container_width=True):
+        # Check if Stripe is configured
+        try:
+            from app.modules.payment import get_stripe_client
+            stripe_configured = True
             try:
-                from app.db_cloud import init_db
-                init_db()
-                subscription_id = create_subscription(st.session_state.user_id, "individual")
-                st.success("Subscription created successfully! You can now use the service.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+                get_stripe_client()
+            except:
+                stripe_configured = False
+        except:
+            stripe_configured = False
+        
+        if stripe_configured:
+            # Use Stripe payment
+            if st.button("💳 Subscribe with Payment - Individual", key="subscribe_individual", use_container_width=True):
+                try:
+                    from app.modules.payment import create_checkout_session
+                    import urllib.parse
+                    
+                    # Get current URL for redirect
+                    # In Streamlit Cloud, we'll use a success page
+                    base_url = st.get_option("server.baseUrlPath") or ""
+                    success_url = f"{base_url}?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
+                    cancel_url = f"{base_url}?payment=cancelled"
+                    
+                    session = create_checkout_session(
+                        user_email=st.session_state.user_email,
+                        subscription_type="individual",
+                        success_url=success_url,
+                        cancel_url=cancel_url
+                    )
+                    
+                    if session and session.get('url'):
+                        st.info("Redirecting to payment page...")
+                        st.markdown(f"[Click here to complete payment]({session['url']})")
+                        st.session_state['stripe_session_id'] = session['id']
+                    else:
+                        st.error("Failed to create payment session")
+                except Exception as e:
+                    st.error(f"Payment error: {e}")
+                    st.info("Falling back to free subscription (for testing)")
+                    # Fallback to free subscription
+                    from app.db_cloud import init_db
+                    init_db()
+                    subscription_id = create_subscription(st.session_state.user_id, "individual")
+                    st.success("Subscription created successfully! (Free mode - no payment)")
+                    st.rerun()
+        else:
+            # No payment configured - direct subscription (for testing/development)
+            st.warning("⚠️ Payment not configured. Creating free subscription for testing.")
+            if st.button("Subscribe - Individual (Free/Test)", key="subscribe_individual", use_container_width=True):
+                try:
+                    from app.db_cloud import init_db
+                    init_db()
+                    subscription_id = create_subscription(st.session_state.user_id, "individual")
+                    st.success("Subscription created successfully! (Free mode - no payment required)")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
     
     with col2:
         st.markdown("### 🏢 Enterprise Plan")
@@ -142,15 +213,63 @@ if st.session_state.get("show_subscription_page"):
         st.write(f"- {PLANS['enterprise']['searches_per_month']} searches per month")
         st.write("- Ideal for teams and organizations")
         
-        if st.button("Subscribe - Enterprise", key="subscribe_enterprise", use_container_width=True):
+        # Check if Stripe is configured
+        try:
+            from app.modules.payment import get_stripe_client
+            stripe_configured = True
             try:
-                from app.db_cloud import init_db
-                init_db()
-                subscription_id = create_subscription(st.session_state.user_id, "enterprise")
-                st.success("Subscription created successfully! You can now use the service.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
+                get_stripe_client()
+            except:
+                stripe_configured = False
+        except:
+            stripe_configured = False
+        
+        if stripe_configured:
+            # Use Stripe payment
+            if st.button("💳 Subscribe with Payment - Enterprise", key="subscribe_enterprise", use_container_width=True):
+                try:
+                    from app.modules.payment import create_checkout_session
+                    import urllib.parse
+                    
+                    # Get current URL for redirect
+                    base_url = st.get_option("server.baseUrlPath") or ""
+                    success_url = f"{base_url}?payment=success&session_id={{CHECKOUT_SESSION_ID}}"
+                    cancel_url = f"{base_url}?payment=cancelled"
+                    
+                    session = create_checkout_session(
+                        user_email=st.session_state.user_email,
+                        subscription_type="enterprise",
+                        success_url=success_url,
+                        cancel_url=cancel_url
+                    )
+                    
+                    if session and session.get('url'):
+                        st.info("Redirecting to payment page...")
+                        st.markdown(f"[Click here to complete payment]({session['url']})")
+                        st.session_state['stripe_session_id'] = session['id']
+                    else:
+                        st.error("Failed to create payment session")
+                except Exception as e:
+                    st.error(f"Payment error: {e}")
+                    st.info("Falling back to free subscription (for testing)")
+                    # Fallback to free subscription
+                    from app.db_cloud import init_db
+                    init_db()
+                    subscription_id = create_subscription(st.session_state.user_id, "enterprise")
+                    st.success("Subscription created successfully! (Free mode - no payment)")
+                    st.rerun()
+        else:
+            # No payment configured - direct subscription (for testing/development)
+            st.warning("⚠️ Payment not configured. Creating free subscription for testing.")
+            if st.button("Subscribe - Enterprise (Free/Test)", key="subscribe_enterprise", use_container_width=True):
+                try:
+                    from app.db_cloud import init_db
+                    init_db()
+                    subscription_id = create_subscription(st.session_state.user_id, "enterprise")
+                    st.success("Subscription created successfully! (Free mode - no payment required)")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
     
     if st.button("← Back to Main", use_container_width=True):
         st.session_state.show_subscription_page = False

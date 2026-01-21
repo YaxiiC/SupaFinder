@@ -31,3 +31,6 @@ pymupdf>=1.23.0
 # Optional: UI
 streamlit>=1.29.0
 
+# Payment processing (optional)
+stripe>=7.0.0
+

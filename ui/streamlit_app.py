@@ -167,38 +167,38 @@ with st.sidebar:
             if submit_login:
                 if email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
                     try:
-                            from app.modules.auth import verify_user_password, user_has_password
+                        from app.modules.auth import verify_user_password, user_has_password
                         from app.modules.subscription import get_or_create_user
                         from app.db_cloud import init_db
                         init_db()
-                            
-                            email_lower = email.lower().strip()
-                            
-                            # Check if user has password
-                            if user_has_password(email_lower):
-                                # Verify password
-                                if not password:
-                                    st.error("Password is required for this account")
-                                else:
-                                    is_valid, user_id = verify_user_password(email_lower, password)
-                                    if is_valid:
-                                        st.session_state.user_email = email_lower
-                                        st.session_state.user_id = user_id
-                                        st.success("Logged in successfully!")
-                                        st.rerun()
-                                    else:
-                                        st.error("Invalid email or password")
+                        
+                        email_lower = email.lower().strip()
+                        
+                        # Check if user has password
+                        if user_has_password(email_lower):
+                            # Verify password
+                            if not password:
+                                st.error("Password is required for this account")
                             else:
-                                # User doesn't have password (existing user), allow login without password
-                                if password:
-                                    st.warning("This account doesn't have a password set. Please leave password empty or register to set a password.")
-                                else:
-                                    # Legacy login (no password)
-                                    user_id = get_or_create_user(email_lower)
+                                is_valid, user_id = verify_user_password(email_lower, password)
+                                if is_valid:
                                     st.session_state.user_email = email_lower
                                     st.session_state.user_id = user_id
                                     st.success("Logged in successfully!")
                                     st.rerun()
+                                else:
+                                    st.error("Invalid email or password")
+                        else:
+                            # User doesn't have password (existing user), allow login without password
+                            if password:
+                                st.warning("This account doesn't have a password set. Please leave password empty or register to set a password.")
+                            else:
+                                # Legacy login (no password)
+                                user_id = get_or_create_user(email_lower)
+                                st.session_state.user_email = email_lower
+                                st.session_state.user_id = user_id
+                                st.success("Logged in successfully!")
+                                st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
                 else:
@@ -582,35 +582,35 @@ else:
                         # Import and run pipeline
                         from app.pipeline import run_pipeline
                         from app.db_cloud import init_db
-                    import inspect
+                        import inspect
                         init_db()
                         
-                    # Check if run_pipeline accepts progress_callback parameter
-                    # This provides compatibility if Streamlit Cloud hasn't updated yet
-                    sig = inspect.signature(run_pipeline)
-                    kwargs = {
-                        "cv_path": cv_path,
-                        "keywords": keywords.strip() if keywords else None,
-                        "universities_path": uni_path,
-                        "output_path": output_path,
-                        "regions": regions_list,
-                        "countries": countries_list,
-                        "qs_max": qs_max if qs_max else None,
-                        "target": target,
-                        "local_first": local_first,
-                        "user_id": st.session_state.user_id,
-                    }
-                    
-                    # Only add progress_callback if the function accepts it
-                    if "progress_callback" in sig.parameters:
-                        kwargs["progress_callback"] = update_progress
-                    
-                    run_pipeline(**kwargs)
-                    
-                    # Clear progress indicators
-                    progress_bar.progress(1.0)
-                    status_text.empty()
-                    stats_text.empty()
+                        # Check if run_pipeline accepts progress_callback parameter
+                        # This provides compatibility if Streamlit Cloud hasn't updated yet
+                        sig = inspect.signature(run_pipeline)
+                        kwargs = {
+                            "cv_path": cv_path,
+                            "keywords": keywords.strip() if keywords else None,
+                            "universities_path": uni_path,
+                            "output_path": output_path,
+                            "regions": regions_list,
+                            "countries": countries_list,
+                            "qs_max": qs_max if qs_max else None,
+                            "target": target,
+                            "local_first": local_first,
+                            "user_id": st.session_state.user_id,
+                        }
+                        
+                        # Only add progress_callback if the function accepts it
+                        if "progress_callback" in sig.parameters:
+                            kwargs["progress_callback"] = update_progress
+                        
+                        run_pipeline(**kwargs)
+                        
+                        # Clear progress indicators
+                        progress_bar.progress(1.0)
+                        status_text.empty()
+                        stats_text.empty()
                         
                         # Read output and provide download
                         if output_path.exists():
@@ -623,14 +623,14 @@ else:
                                     use_container_width=True
                                 )
                         st.success("✅ Pipeline completed successfully!")
-                            
-                            # Show updated subscription info
-                            from app.modules.subscription import get_user_subscription
-                            subscription = get_user_subscription(st.session_state.user_id)
-                            if subscription:
-                                st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
-                        else:
-                            st.error("No output file generated")
+                        
+                        # Show updated subscription info
+                        from app.modules.subscription import get_user_subscription
+                        subscription = get_user_subscription(st.session_state.user_id)
+                        if subscription:
+                            st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                    else:
+                        st.error("No output file generated")
                             
                 except ValueError as e:
                     # Subscription-related errors

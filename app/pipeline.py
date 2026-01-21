@@ -1,6 +1,6 @@
 """Pipeline orchestrator for PhD Supervisor Finder."""
 
-from typing import List, Optional, Tuple, Dict, Callable
+from typing import List, Optional, Tuple, Dict, Callable, Any
 import pandas as pd
 from pathlib import Path
 from rich.console import Console
@@ -231,7 +231,7 @@ def run_pipeline(
     target: int = TARGET_SUPERVISORS,
     local_first: bool = True,
     user_id: Optional[int] = None,
-    progress_callback: Optional[Callable[..., None]] = None
+    progress_callback: Optional[Callable[[str, float, str], None]] = None
 ) -> None:
     """Run the full supervisor discovery pipeline.
     

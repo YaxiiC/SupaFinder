@@ -113,6 +113,9 @@ with st.sidebar:
     else:
         st.info("Please log in to use the service")
         
+        # Google OAuth - Temporarily disabled
+        # Uncomment the code below to enable Google OAuth
+        """
         # Check if Google OAuth is configured
         from app.config import get_secret
         from app.modules.google_oauth import get_google_oauth_url, exchange_code_for_token, get_user_info
@@ -154,6 +157,7 @@ with st.sidebar:
                 st.markdown(f'<a href="{auth_url}" target="_self"><button style="width:100%; padding:10px; background-color:#4285F4; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer;">🔵 Login with Google</button></a>', unsafe_allow_html=True)
                 st.divider()
                 st.caption("Or login with email and password")
+        """
         
         # Email/Password Login
         login_tab, register_tab = st.tabs(["Login", "Register"])
@@ -174,12 +178,18 @@ with st.sidebar:
                         
                         email_lower = email.lower().strip()
                         
-                        # Check if user has password
-                        if user_has_password(email_lower):
-                            # Verify password
-                            if not password:
-                                st.error("Password is required for this account")
+                        # Security: Password is always required for login
+                        if not password:
+                            st.error("Password is required. Please enter your password or register a new account.")
+                        else:
+                            # Check if user exists and verify password
+                            from app.modules.auth import verify_user_password, user_exists
+                            
+                            if not user_exists(email_lower):
+                                # User doesn't exist - redirect to registration
+                                st.warning("Account not found. Please register a new account using the 'Register' tab.")
                             else:
+                                # User exists - verify password (password is always required)
                                 is_valid, user_id = verify_user_password(email_lower, password)
                                 if is_valid:
                                     st.session_state.user_email = email_lower
@@ -187,18 +197,7 @@ with st.sidebar:
                                     st.success("Logged in successfully!")
                                     st.rerun()
                                 else:
-                                    st.error("Invalid email or password")
-                        else:
-                            # User doesn't have password (existing user), allow login without password
-                            if password:
-                                st.warning("This account doesn't have a password set. Please leave password empty or register to set a password.")
-                            else:
-                                # Legacy login (no password)
-                                user_id = get_or_create_user(email_lower)
-                                st.session_state.user_email = email_lower
-                                st.session_state.user_id = user_id
-                                st.success("Logged in successfully!")
-                                st.rerun()
+                                    st.error("Invalid email or password. If you haven't set a password yet, please register first.")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 else:

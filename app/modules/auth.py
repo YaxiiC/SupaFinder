@@ -54,9 +54,29 @@ def set_user_password(user_id: int, password: str) -> bool:
         raise Exception(f"Failed to set password: {e}")
 
 
+def user_exists(email: str) -> bool:
+    """Check if a user exists in the database."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    db_type = os.getenv("DB_TYPE", "sqlite").lower()
+    
+    if db_type == "postgresql":
+        cursor.execute("SELECT id FROM users WHERE email = %s", (email.lower().strip(),))
+    else:
+        cursor.execute("SELECT id FROM users WHERE email = ?", (email.lower().strip(),))
+    
+    row = cursor.fetchone()
+    conn.close()
+    
+    return row is not None
+
+
 def verify_user_password(email: str, password: str) -> Tuple[bool, Optional[int]]:
     """
     Verify user password.
+    
+    SECURITY: Password is always required. Users without passwords cannot login.
     
     Returns:
         (is_valid, user_id) - is_valid is True if password is correct, user_id is the user ID
@@ -79,9 +99,9 @@ def verify_user_password(email: str, password: str) -> Tuple[bool, Optional[int]
     
     user_id, password_hash = row
     
-    # If no password set, allow login (backward compatibility for existing users)
+    # SECURITY: Password is always required - no password means cannot login
     if password_hash is None:
-        return True, user_id
+        return False, None
     
     # Verify password
     if verify_password(password, password_hash):

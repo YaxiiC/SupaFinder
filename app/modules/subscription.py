@@ -20,7 +20,7 @@ PLANS = {
         "name": "Individual Monthly"
     },
     "enterprise": {
-        "searches_per_month": 10,
+        "searches_per_month": 12,
         "price_usd": 48,  # Price in GBP: £48
         "name": "Enterprise Monthly"
     }

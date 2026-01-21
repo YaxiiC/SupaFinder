@@ -323,18 +323,18 @@ else:
                             st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
                     else:
                         st.error("No output file generated")
-                            
-                except ValueError as e:
-                    # Subscription-related errors
-                    st.error(str(e))
-                    if "subscription" in str(e).lower() or "searches" in str(e).lower():
-                        if st.button("💳 Go to Subscription Page", use_container_width=True):
-                            st.session_state.show_subscription_page = True
-                            st.rerun()
-                except Exception as e:
-                    st.error(f"Error running pipeline: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+            
+            except ValueError as e:
+                # Subscription-related errors
+                st.error(str(e))
+                if "subscription" in str(e).lower() or "searches" in str(e).lower():
+                    if st.button("💳 Go to Subscription Page", use_container_width=True):
+                        st.session_state.show_subscription_page = True
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Error running pipeline: {e}")
+                import traceback
+                st.code(traceback.format_exc())
     
     st.divider()
     st.caption("PhD Supervisor Finder • LLM-first approach using DeepSeek")

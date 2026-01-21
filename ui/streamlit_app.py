@@ -32,7 +32,7 @@ st.markdown("""
     
     /* Headers */
     h1 {
-        color: #FF69B4 !important;
+        color: #4169E1 !important;  /* Blue for SupaFinder */
         font-weight: 700 !important;
     }
     
@@ -610,7 +610,7 @@ elif st.session_state.get("show_history_page"):
 
 else:
     # Main search interface
-    st.title("🔍 SupaFinder")
+    st.markdown('<h1 style="color: #4169E1;">🔍 SupaFinder</h1>', unsafe_allow_html=True)
     st.markdown("*AI-assisted PhD supervisor discovery*")
     
     if not st.session_state.user_email:
@@ -818,4 +818,4 @@ else:
                 st.code(traceback.format_exc())
     
     st.divider()
-    st.caption("SupaFinder • AI-powered PhD supervisor discovery")
+    st.markdown('<p style="color: #4169E1; font-style: italic; text-align: center;">SupaFinder • AI-powered PhD supervisor discovery</p>', unsafe_allow_html=True)

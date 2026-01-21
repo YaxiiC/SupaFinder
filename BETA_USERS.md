@@ -40,7 +40,7 @@ BETA_USERS = "beta1@test.com:10,beta2@test.com:10,beta3@test.com:10"
 
 3. **正常订阅**
    - Individual Plan: 3次/月
-   - Enterprise Plan: 10次/月
+   - Enterprise Plan: 12次/月
 
 ### 使用流程
 

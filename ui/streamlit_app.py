@@ -436,7 +436,7 @@ elif st.session_state.get("show_history_page"):
 else:
     # Main search interface
     st.title("🎓 PhD Supervisor Finder")
-    st.markdown("*AI-assisted PhD supervisor discovery using DeepSeek*")
+    st.markdown("*AI-assisted PhD supervisor discovery*")
     
     if not st.session_state.user_email:
         st.warning("⚠️ Please log in using the sidebar to use the service. First-time users get 1 free search!")
@@ -453,20 +453,20 @@ else:
         st.subheader("🔬 Research Keywords (Optional)")
         keywords = st.text_area(
             "Enter your research keywords (comma-separated)",
-            placeholder="e.g., knee MRI, cartilage segmentation, radiomics, diffusion model",
+            placeholder="e.g., psychology, social sciences, behavioral sciences, cognitive sciences, human development, developmental psychology",
             height=100,
             help="Optional: Enter your research keywords. At least one of CV or keywords is required."
         )
     
     with col2:
         st.subheader("🏛️ Universities")
-        st.info("Using built-in universities list (Top 200+ universities worldwide)")
+        st.info("Using built-in universities list (QS Rank Top 200+ universities worldwide)")
         
         st.subheader("🎯 Filters")
         
         regions = st.text_input(
             "Regions (comma-separated)",
-            placeholder="e.g., UK, Europe, US"
+            placeholder="e.g., Europe, North America, Asia"
         )
         
         countries = st.text_input(

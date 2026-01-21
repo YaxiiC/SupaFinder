@@ -68,26 +68,54 @@ class DeepSeekClient:
             keywords = "No explicit keywords provided - extract from CV"
         
         system_prompt = """You are a PhD supervisor search assistant. From the user's CV text and keywords, output strict JSON:
-- core_keywords (10-20): PRIMARY, HIGH-LEVEL, GENERAL research field terms (e.g., "clinical medicine", "oncology", "cancer research", "biomedical engineering")
+- core_keywords (10-20): PRIMARY, HIGH-LEVEL, GENERAL research field terms 
   CRITICAL: Use ONLY broad, high-level research field terms. DO NOT include:
     - Specific technical terms (e.g., "NSCLC", "CRISPR-Cas9", "EGFR-TKI resistance")
     - Gene names, protein names, or molecular pathways
     - Specific methodologies or techniques (e.g., "RNA-seq", "ChIP-seq")
     - Specific diseases or conditions (unless it's the main field, e.g., "lung cancer" is OK, but "non-small cell lung cancer" is too specific)
-  Examples of GOOD keywords: "oncology", "cancer research", "medical imaging", "biomedical sciences"
+  
+  IMPORTANT: Accurately identify the PRIMARY field category:
+    - If the research is SOCIAL SCIENCES/EDUCATION/PSYCHOLOGY related (e.g., music therapy, music education, educational psychology, social work, counseling, therapy in social contexts), use keywords from: psychology, education, social sciences, educational sciences, counseling psychology, music education, educational psychology, social psychology, developmental psychology, etc.
+    - If the research is CLINICAL/MEDICAL related (e.g., clinical medicine, medical treatment, hospital-based therapy, medical rehabilitation), use keywords from: clinical medicine, health sciences, medical sciences, rehabilitation medicine, etc.
+    - If the research is in between, prioritize the PRIMARY context. For example:
+      * "Music therapy" → PRIMARY field is PSYCHOLOGY/EDUCATION, NOT clinical medicine
+      * "Art therapy" → PRIMARY field is PSYCHOLOGY/SOCIAL SCIENCES
+      * "Occupational therapy" → Can be both, but if mentioned with "education" or "psychology", prioritize education/psychology
+      * "Speech therapy" → Can be clinical OR educational; determine from context
+  
+  Examples of GOOD keywords by category:
+    - Social/Educational: "psychology", "education", "educational psychology", "music education", "counseling psychology", "social sciences", "developmental psychology"
+    - Medical/Clinical: "clinical medicine", "medical sciences", "health sciences", "rehabilitation medicine", "biomedical sciences"
+    - Music therapy specifically: "music therapy", "music psychology", "music education", "therapeutic music", "applied music psychology", NOT "clinical medicine" or "medical sciences" unless explicitly in a medical context
+  
   Examples of BAD keywords: "NSCLC", "EGFR mutation", "CRISPR gene editing", "single-cell RNA sequencing"
   
-- adjacent_keywords (10-20): related/broader HIGH-LEVEL terms (e.g., "biomedical research", "medical sciences", "health sciences", NOT "EGFR-TKI resistance" or "tumor microenvironment signaling")
+- adjacent_keywords (10-20): related/broader HIGH-LEVEL terms that are RELEVANT to the same field category
+  IMPORTANT: Match the field category of core_keywords:
+    - If core_keywords are psychology/education: use terms like "psychology", "education", "cognitive sciences", "behavioral sciences", "human development", "social sciences", "educational research"
+    - If core_keywords are medical/clinical: use terms like "biomedical research", "medical sciences", "health sciences", "clinical sciences", "public health"
+    - Do NOT mix categories: if core is psychology/education, do NOT add "clinical medicine" or "medical sciences" as adjacent keywords
+  
   Same rules: only high-level, general terms. Think of terms that describe research AREAS, not specific projects or techniques.
 
 - negative_keywords (5-10): terms to exclude - ONLY include fields that are COMPLETELY unrelated to the research area
-  CRITICAL: DO NOT include engineering, computer science, physics, chemistry, mathematics, or other STEM fields as negative keywords, as these may be relevant (e.g., biomedical engineering, computational medicine, medical physics, pharmaceutical chemistry).
-  Only include truly unrelated fields like: political science, economics (if not health economics), literature, arts, etc.
+  CRITICAL: DO NOT include engineering, computer science, physics, chemistry, mathematics, or other STEM fields as negative keywords, as these may be relevant.
+  IMPORTANT: If the research is in psychology/education (e.g., music therapy), DO include "clinical medicine", "medical sciences" as negative keywords if they are NOT the primary context. This prevents over-association with medical fields.
+  Only include truly unrelated fields like: political science, economics (if not relevant), literature (if not arts-related research), etc.
 
-- preferred_departments (3-8): likely department names
+- preferred_departments (3-8): likely department names matching the field category
+  - For psychology/education: "Psychology", "Education", "Music Education", "Educational Psychology", "Counseling", "Human Development"
+  - For medical/clinical: "Medicine", "Health Sciences", "Rehabilitation Medicine", "Clinical Medicine"
+  
 - query_templates (5-10): search templates, MUST include placeholder site:{domain}
 
-CRITICAL: Focus ONLY on HIGH-LEVEL, GENERAL research fields. Think of terms that supervisors would use to broadly describe their research area in a department website or conference. Avoid any specific technical details, methodologies, or narrow topics.
+CRITICAL: 
+1. Focus ONLY on HIGH-LEVEL, GENERAL research fields
+2. Accurately identify the PRIMARY field category (social sciences/education/psychology vs medical/clinical)
+3. Do NOT over-associate therapy/intervention terms with medical sciences if the context is primarily social/educational/psychological
+4. Think of terms that supervisors would use to broadly describe their research area in a department website or conference
+5. Avoid any specific technical details, methodologies, or narrow topics
 
 Output JSON only. No explanation.
 
@@ -95,7 +123,21 @@ If CV text is not provided, extract keywords based on the user-provided keywords
 If keywords are not provided, extract keywords from the CV text.
 If both are provided, use both to extract the most accurate research profile."""
         
-        user_prompt = f"CV:\n{cv_text}\n\nUser-provided keywords:\n{keywords}\n\nExtract ONLY HIGH-LEVEL, GENERAL research field keywords. Do NOT include specific technical terms, gene names, methodologies, or detailed techniques. Think broad research areas, not specific projects. Do NOT exclude engineering, computer science, physics, chemistry, or mathematics as these may be relevant to medical research."
+        user_prompt = f"""CV:
+{cv_text}
+
+User-provided keywords:
+{keywords}
+
+Extract ONLY HIGH-LEVEL, GENERAL research field keywords. 
+
+IMPORTANT: Carefully identify whether this research belongs to:
+- SOCIAL SCIENCES/EDUCATION/PSYCHOLOGY domain (e.g., music therapy, music education, educational psychology, counseling)
+- MEDICAL/CLINICAL domain (e.g., clinical medicine, medical treatment, hospital-based therapy)
+
+Do NOT over-associate therapy/intervention terms with medical sciences if the primary context is social/educational/psychological.
+
+Do NOT include specific technical terms, gene names, methodologies, or detailed techniques. Think broad research areas, not specific projects. Match adjacent keywords to the same field category as core keywords."""
         response = self._call(system_prompt, user_prompt)
         return self._parse_json(response, ResearchProfile)
     

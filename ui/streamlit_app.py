@@ -113,25 +113,143 @@ with st.sidebar:
     else:
         st.info("Please log in to use the service")
         
-        with st.form("login_form"):
-            email = st.text_input("Email", placeholder="your.email@example.com")
-            submit_login = st.form_submit_button("Login / Register", use_container_width=True)
+        # Check if Google OAuth is configured
+        from app.config import get_secret
+        from app.modules.google_oauth import get_google_oauth_url, exchange_code_for_token, get_user_info
+        
+        google_client_id = get_secret("GOOGLE_OAUTH_CLIENT_ID", "")
+        google_oauth_configured = bool(google_client_id)
+        
+        # Handle Google OAuth callback
+        if "code" in st.query_params and google_oauth_configured:
+            code = st.query_params["code"]
+            token_data = exchange_code_for_token(code)
+            
+            if token_data and "access_token" in token_data:
+                access_token = token_data["access_token"]
+                user_info = get_user_info(access_token)
+                
+                if user_info:
+                    email = user_info.get("email", "").lower().strip()
+                    
+                    if email:
+                        try:
+                            from app.modules.subscription import get_or_create_user
+                            from app.db_cloud import init_db
+                            init_db()
+                            user_id = get_or_create_user(email)
+                            st.session_state.user_email = email
+                            st.session_state.user_id = user_id
+                            # Clear query params
+                            st.query_params.clear()
+                            st.success("Logged in successfully with Google!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        
+        # Google OAuth Login Button
+        if google_oauth_configured:
+            auth_url = get_google_oauth_url()
+            if auth_url:
+                st.markdown(f'<a href="{auth_url}" target="_self"><button style="width:100%; padding:10px; background-color:#4285F4; color:white; border:none; border-radius:5px; font-size:16px; cursor:pointer;">🔵 Login with Google</button></a>', unsafe_allow_html=True)
+                st.divider()
+                st.caption("Or login with email and password")
+        
+        # Email/Password Login
+        login_tab, register_tab = st.tabs(["Login", "Register"])
+        
+        with login_tab:
+            with st.form("login_form"):
+                email = st.text_input("Email", placeholder="your.email@example.com", key="login_email")
+                password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
+                submit_login = st.form_submit_button("Login", use_container_width=True)
             
             if submit_login:
                 if email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
                     try:
+                            from app.modules.auth import verify_user_password, user_has_password
                         from app.modules.subscription import get_or_create_user
                         from app.db_cloud import init_db
                         init_db()
-                        user_id = get_or_create_user(email.lower().strip())
-                        st.session_state.user_email = email.lower().strip()
-                        st.session_state.user_id = user_id
-                        st.success("Logged in successfully!")
-                        st.rerun()
+                            
+                            email_lower = email.lower().strip()
+                            
+                            # Check if user has password
+                            if user_has_password(email_lower):
+                                # Verify password
+                                if not password:
+                                    st.error("Password is required for this account")
+                                else:
+                                    is_valid, user_id = verify_user_password(email_lower, password)
+                                    if is_valid:
+                                        st.session_state.user_email = email_lower
+                                        st.session_state.user_id = user_id
+                                        st.success("Logged in successfully!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Invalid email or password")
+                            else:
+                                # User doesn't have password (existing user), allow login without password
+                                if password:
+                                    st.warning("This account doesn't have a password set. Please leave password empty or register to set a password.")
+                                else:
+                                    # Legacy login (no password)
+                                    user_id = get_or_create_user(email_lower)
+                                    st.session_state.user_email = email_lower
+                                    st.session_state.user_id = user_id
+                                    st.success("Logged in successfully!")
+                                    st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
                 else:
                     st.error("Please enter a valid email address")
+        
+        with register_tab:
+            with st.form("register_form"):
+                st.info("Create a new account with email and password")
+                reg_email = st.text_input("Email", placeholder="your.email@example.com", key="reg_email")
+                reg_password = st.text_input("Password", type="password", placeholder="At least 8 characters", key="reg_password")
+                reg_password_confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password", key="reg_password_confirm")
+                submit_register = st.form_submit_button("Register", use_container_width=True)
+                
+                if submit_register:
+                    if reg_email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', reg_email):
+                        if reg_password:
+                            # Validate password
+                            from app.modules.auth import validate_password_strength, set_user_password, user_has_password
+                            from app.modules.subscription import get_or_create_user
+                            from app.db_cloud import init_db
+                            init_db()
+                            
+                            is_valid, error_msg = validate_password_strength(reg_password)
+                            if not is_valid:
+                                st.error(error_msg)
+                            elif reg_password != reg_password_confirm:
+                                st.error("Passwords do not match")
+                            else:
+                                try:
+                                    reg_email_lower = reg_email.lower().strip()
+                                    
+                                    # Check if user already exists
+                                    if user_has_password(reg_email_lower):
+                                        st.error("This email is already registered. Please login instead.")
+                                    else:
+                                        # Create user or get existing user
+                                        user_id = get_or_create_user(reg_email_lower)
+                                        
+                                        # Set password
+                                        set_user_password(user_id, reg_password)
+                                        
+                                        st.session_state.user_email = reg_email_lower
+                                        st.session_state.user_id = user_id
+                                        st.success("Account created successfully! You are now logged in.")
+                                        st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+                        else:
+                            st.error("Please enter a password")
+                    else:
+                        st.error("Please enter a valid email address")
 
 # Main content
 if st.session_state.get("show_subscription_page"):
@@ -433,40 +551,40 @@ else:
                 if "found_count" in kwargs:
                     stats_text.success(f"✅ **Progress:** Found {kwargs['found_count']} supervisors so far")
             
-            try:
-                # Use built-in universities template
-                from app.config import DATA_DIR
-                uni_path = DATA_DIR / "universities_template.xlsx"
-                
-                if not uni_path.exists():
-                    st.error(f"Universities template not found at {uni_path}")
-                    st.stop()
-                
-                # Save uploaded CV to temp directory if provided
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    tmpdir = Path(tmpdir)
+                try:
+                    # Use built-in universities template
+                    from app.config import DATA_DIR
+                    uni_path = DATA_DIR / "universities_template.xlsx"
                     
+                    if not uni_path.exists():
+                        st.error(f"Universities template not found at {uni_path}")
+                        st.stop()
+                    
+                # Save uploaded CV to temp directory if provided
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        tmpdir = Path(tmpdir)
+                        
                     # Save CV if provided
                     cv_path = None
                     if cv_file:
                         cv_path = tmpdir / cv_file.name
                         cv_path.write_bytes(cv_file.read())
-                    
-                    # Output path
-                    output_path = tmpdir / "supervisors.xlsx"
-                    
-                    # Parse regions
-                    regions_list = [r.strip() for r in regions.split(",")] if regions else None
-                    
-                    # Parse countries
-                    countries_list = [c.strip() for c in countries.split(",")] if countries else None
-                    
-                    # Import and run pipeline
-                    from app.pipeline import run_pipeline
-                    from app.db_cloud import init_db
+                        
+                        # Output path
+                        output_path = tmpdir / "supervisors.xlsx"
+                        
+                        # Parse regions
+                        regions_list = [r.strip() for r in regions.split(",")] if regions else None
+                        
+                        # Parse countries
+                        countries_list = [c.strip() for c in countries.split(",")] if countries else None
+                        
+                        # Import and run pipeline
+                        from app.pipeline import run_pipeline
+                        from app.db_cloud import init_db
                     import inspect
-                    init_db()
-                    
+                        init_db()
+                        
                     # Check if run_pipeline accepts progress_callback parameter
                     # This provides compatibility if Streamlit Cloud hasn't updated yet
                     sig = inspect.signature(run_pipeline)
@@ -493,38 +611,38 @@ else:
                     progress_bar.progress(1.0)
                     status_text.empty()
                     stats_text.empty()
-                    
-                    # Read output and provide download
-                    if output_path.exists():
-                        with open(output_path, "rb") as f:
-                            st.download_button(
-                                label="📥 Download Results (Excel)",
-                                data=f.read(),
-                                file_name="supervisors.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
-                            )
-                        st.success("✅ Pipeline completed successfully!")
                         
-                        # Show updated subscription info
-                        from app.modules.subscription import get_user_subscription
-                        subscription = get_user_subscription(st.session_state.user_id)
-                        if subscription:
-                            st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
-                    else:
-                        st.error("No output file generated")
-            
-            except ValueError as e:
-                # Subscription-related errors
-                st.error(str(e))
-                if "subscription" in str(e).lower() or "searches" in str(e).lower():
-                    if st.button("💳 Go to Subscription Page", use_container_width=True):
-                        st.session_state.show_subscription_page = True
-                        st.rerun()
-            except Exception as e:
-                st.error(f"Error running pipeline: {e}")
-                import traceback
-                st.code(traceback.format_exc())
+                        # Read output and provide download
+                        if output_path.exists():
+                            with open(output_path, "rb") as f:
+                                st.download_button(
+                                    label="📥 Download Results (Excel)",
+                                    data=f.read(),
+                                    file_name="supervisors.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    use_container_width=True
+                                )
+                        st.success("✅ Pipeline completed successfully!")
+                            
+                            # Show updated subscription info
+                            from app.modules.subscription import get_user_subscription
+                            subscription = get_user_subscription(st.session_state.user_id)
+                            if subscription:
+                                st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                        else:
+                            st.error("No output file generated")
+                            
+                except ValueError as e:
+                    # Subscription-related errors
+                    st.error(str(e))
+                    if "subscription" in str(e).lower() or "searches" in str(e).lower():
+                        if st.button("💳 Go to Subscription Page", use_container_width=True):
+                            st.session_state.show_subscription_page = True
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"Error running pipeline: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
     
     st.divider()
     st.caption("PhD Supervisor Finder • LLM-first approach using DeepSeek")

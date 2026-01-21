@@ -84,7 +84,8 @@ REQUEST_TIMEOUT = 30
 # Developer mode - unlimited access
 # Set DEVELOPER_EMAILS to comma-separated list of developer emails
 # Example: DEVELOPER_EMAILS=dev@example.com,admin@example.com
-DEVELOPER_EMAILS = [e.strip().lower() for e in os.getenv("DEVELOPER_EMAILS", "").split(",") if e.strip()]
+DEVELOPER_EMAILS_RAW = get_secret("DEVELOPER_EMAILS", "")
+DEVELOPER_EMAILS = [e.strip().lower() for e in DEVELOPER_EMAILS_RAW.split(",") if e.strip()]
 
 # Beta users - get free searches before requiring subscription
 # Format: "email1@example.com:10,email2@example.com:10" (email:free_searches,email:free_searches)

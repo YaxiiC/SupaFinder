@@ -34,3 +34,6 @@ streamlit>=1.29.0
 # Payment processing (optional)
 stripe>=7.0.0
 
+# Authentication
+bcrypt>=4.0.0
+

@@ -148,22 +148,33 @@ if st.session_state.get("show_subscription_page"):
         st.write(f"- {PLANS['individual']['searches_per_month']} searches per month")
         st.write("- Perfect for personal use")
         
-        # Check if Stripe is configured
+        # Check if Stripe is fully configured
+        stripe_configured = False
+        stripe_error = None
         try:
-            from app.modules.payment import get_stripe_client
-            stripe_configured = True
+            from app.modules.payment import get_stripe_client, create_checkout_session
+            # Test if we can get the client
+            get_stripe_client()
+            # Test if we can create a session (this checks Price IDs too)
             try:
-                get_stripe_client()
-            except:
-                stripe_configured = False
-        except:
-            stripe_configured = False
+                # Just check if price IDs are configured, don't actually create session
+                from app.config import get_secret
+                price_id = get_secret("STRIPE_PRICE_ID_INDIVIDUAL", "")
+                if not price_id:
+                    stripe_error = "STRIPE_PRICE_ID_INDIVIDUAL not configured in Streamlit Secrets"
+                else:
+                    stripe_configured = True
+            except Exception as e:
+                stripe_error = f"Stripe configuration error: {e}"
+        except ImportError:
+            stripe_error = "stripe package not installed"
+        except Exception as e:
+            stripe_error = f"Stripe not configured: {e}"
         
         if stripe_configured:
-            # Use Stripe payment
+            # Use Stripe payment - REQUIRED
             if st.button("💳 Subscribe with Payment - Individual", key="subscribe_individual", use_container_width=True):
                 try:
-                    from app.modules.payment import create_checkout_session
                     import urllib.parse
                     
                     # Get current URL for redirect
@@ -184,28 +195,24 @@ if st.session_state.get("show_subscription_page"):
                         st.markdown(f"[Click here to complete payment]({session['url']})")
                         st.session_state['stripe_session_id'] = session['id']
                     else:
-                        st.error("Failed to create payment session")
+                        st.error("Failed to create payment session. Please contact support.")
                 except Exception as e:
                     st.error(f"Payment error: {e}")
-                    st.info("Falling back to free subscription (for testing)")
-                    # Fallback to free subscription
-                    from app.db_cloud import init_db
-                    init_db()
-                    subscription_id = create_subscription(st.session_state.user_id, "individual")
-                    st.success("Subscription created successfully! (Free mode - no payment)")
-                    st.rerun()
+                    st.info("Please check your Stripe configuration in Streamlit Secrets.")
         else:
-            # No payment configured - direct subscription (for testing/development)
-            st.warning("⚠️ Payment not configured. Creating free subscription for testing.")
-            if st.button("Subscribe - Individual (Free/Test)", key="subscribe_individual", use_container_width=True):
-                try:
-                    from app.db_cloud import init_db
-                    init_db()
-                    subscription_id = create_subscription(st.session_state.user_id, "individual")
-                    st.success("Subscription created successfully! (Free mode - no payment required)")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+            # Payment REQUIRED - show error instead of allowing free subscription
+            st.error("❌ Payment system not configured")
+            if stripe_error:
+                st.warning(f"**Error:** {stripe_error}")
+            st.info("""
+            **To enable subscriptions, please configure:**
+            1. `STRIPE_SECRET_KEY` in Streamlit Secrets
+            2. `STRIPE_PRICE_ID_INDIVIDUAL` in Streamlit Secrets
+            3. Create the price in Stripe Dashboard
+            
+            See `STRIPE_SETUP.md` for detailed instructions.
+            """)
+            st.button("Subscribe - Individual", key="subscribe_individual", disabled=True, use_container_width=True)
     
     with col2:
         st.markdown("### 🏢 Enterprise Plan")
@@ -213,22 +220,33 @@ if st.session_state.get("show_subscription_page"):
         st.write(f"- {PLANS['enterprise']['searches_per_month']} searches per month")
         st.write("- Ideal for teams and organizations")
         
-        # Check if Stripe is configured
+        # Check if Stripe is fully configured
+        stripe_configured = False
+        stripe_error = None
         try:
-            from app.modules.payment import get_stripe_client
-            stripe_configured = True
+            from app.modules.payment import get_stripe_client, create_checkout_session
+            # Test if we can get the client
+            get_stripe_client()
+            # Test if we can create a session (this checks Price IDs too)
             try:
-                get_stripe_client()
-            except:
-                stripe_configured = False
-        except:
-            stripe_configured = False
+                # Just check if price IDs are configured, don't actually create session
+                from app.config import get_secret
+                price_id = get_secret("STRIPE_PRICE_ID_ENTERPRISE", "")
+                if not price_id:
+                    stripe_error = "STRIPE_PRICE_ID_ENTERPRISE not configured in Streamlit Secrets"
+                else:
+                    stripe_configured = True
+            except Exception as e:
+                stripe_error = f"Stripe configuration error: {e}"
+        except ImportError:
+            stripe_error = "stripe package not installed"
+        except Exception as e:
+            stripe_error = f"Stripe not configured: {e}"
         
         if stripe_configured:
-            # Use Stripe payment
+            # Use Stripe payment - REQUIRED
             if st.button("💳 Subscribe with Payment - Enterprise", key="subscribe_enterprise", use_container_width=True):
                 try:
-                    from app.modules.payment import create_checkout_session
                     import urllib.parse
                     
                     # Get current URL for redirect
@@ -248,28 +266,24 @@ if st.session_state.get("show_subscription_page"):
                         st.markdown(f"[Click here to complete payment]({session['url']})")
                         st.session_state['stripe_session_id'] = session['id']
                     else:
-                        st.error("Failed to create payment session")
+                        st.error("Failed to create payment session. Please contact support.")
                 except Exception as e:
                     st.error(f"Payment error: {e}")
-                    st.info("Falling back to free subscription (for testing)")
-                    # Fallback to free subscription
-                    from app.db_cloud import init_db
-                    init_db()
-                    subscription_id = create_subscription(st.session_state.user_id, "enterprise")
-                    st.success("Subscription created successfully! (Free mode - no payment)")
-                    st.rerun()
+                    st.info("Please check your Stripe configuration in Streamlit Secrets.")
         else:
-            # No payment configured - direct subscription (for testing/development)
-            st.warning("⚠️ Payment not configured. Creating free subscription for testing.")
-            if st.button("Subscribe - Enterprise (Free/Test)", key="subscribe_enterprise", use_container_width=True):
-                try:
-                    from app.db_cloud import init_db
-                    init_db()
-                    subscription_id = create_subscription(st.session_state.user_id, "enterprise")
-                    st.success("Subscription created successfully! (Free mode - no payment required)")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+            # Payment REQUIRED - show error instead of allowing free subscription
+            st.error("❌ Payment system not configured")
+            if stripe_error:
+                st.warning(f"**Error:** {stripe_error}")
+            st.info("""
+            **To enable subscriptions, please configure:**
+            1. `STRIPE_SECRET_KEY` in Streamlit Secrets
+            2. `STRIPE_PRICE_ID_ENTERPRISE` in Streamlit Secrets
+            3. Create the price in Stripe Dashboard
+            
+            See `STRIPE_SETUP.md` for detailed instructions.
+            """)
+            st.button("Subscribe - Enterprise", key="subscribe_enterprise", disabled=True, use_container_width=True)
     
     if st.button("← Back to Main", use_container_width=True):
         st.session_state.show_subscription_page = False

@@ -677,10 +677,17 @@ else:
             st.write(f"🔴 DEBUG: Has CV: {cv_file is not None}")
             st.write(f"🔴 DEBUG: Keywords: {keywords[:50] if keywords else 'None'}")
             
+            # Initialize stop flag in session state
+            if 'search_stopped' not in st.session_state:
+                st.session_state.search_stopped = False
+            if 'partial_results' not in st.session_state:
+                st.session_state.partial_results = None
+            
             # Create progress tracking components
             progress_bar = st.progress(0)
             status_text = st.empty()
             stats_text = st.empty()
+            stop_button_container = st.empty()
             
             # Progress callback function with aggressive keep-alive mechanism
             # Designed to prevent timeout for tasks up to 1 hour
@@ -690,6 +697,11 @@ else:
             # Track last update time for keep-alive
             if 'last_progress_update' not in st.session_state:
                 st.session_state.last_progress_update = time.time()
+            
+            # Stop flag function for pipeline
+            def check_stop_flag():
+                """Check if user requested to stop the search."""
+                return st.session_state.get('search_stopped', False)
             
             def update_progress(step: str, progress: float, message: str, **kwargs):
                 """Update Streamlit progress display with aggressive keep-alive mechanism."""
@@ -715,6 +727,17 @@ else:
                         f"✅ **Progress:** Found {kwargs['found_count']} supervisors so far "
                         f"| Last update: {timestamp} | Elapsed: {elapsed_minutes}m {elapsed_seconds}s"
                     )
+                    # Save partial results to session state
+                    st.session_state.partial_results_count = kwargs['found_count']
+                
+                # Show stop button during search (not at start or end)
+                if step not in ["loading", "export", "stopped"] and progress > 0.1 and progress < 0.99:
+                    with stop_button_container.container():
+                        if st.button("⏹️ Stop Search", type="secondary", use_container_width=True, key="stop_search_btn"):
+                            st.session_state.search_stopped = True
+                            st.rerun()
+                else:
+                    stop_button_container.empty()
                 
                 # Aggressive keep-alive: Update session state to keep connection alive
                 st.session_state.last_progress_update = current_time
@@ -813,35 +836,72 @@ else:
                     if "progress_callback" in sig.parameters:
                         kwargs["progress_callback"] = update_progress
                     
+                    # Add stop_flag if function accepts it
+                    if "stop_flag" in sig.parameters:
+                        kwargs["stop_flag"] = check_stop_flag
+                    
+                    # Reset stop flag before starting
+                    st.session_state.search_stopped = False
+                    
                     st.write("🔴 DEBUG: Calling run_pipeline...")
                     status_text.info("🚀 Running pipeline...")
-                    run_pipeline(**kwargs)
-                    st.write("🔴 DEBUG: Pipeline completed!")
                     
-                    # Clear progress indicators
-                    progress_bar.progress(1.0)
-                    status_text.empty()
-                    stats_text.empty()
-                    
-                    # Read output and provide download
-                    if output_path.exists():
-                        with open(output_path, "rb") as f:
-                            st.download_button(
-                                label="📥 Download Results (Excel)",
-                                data=f.read(),
-                                file_name="supervisors.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
-                            )
-                        st.success("✅ Pipeline completed successfully!")
+                    try:
+                        found_profiles = run_pipeline(**kwargs)
+                        st.write("🔴 DEBUG: Pipeline completed!")
                         
-                        # Show updated subscription info
-                        from app.modules.subscription import get_user_subscription
-                        subscription = get_user_subscription(st.session_state.user_id)
-                        if subscription:
-                            st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
-                    else:
-                        st.error("No output file generated")
+                        # Save results to session state
+                        st.session_state.partial_results = found_profiles
+                        
+                        # Clear stop button
+                        stop_button_container.empty()
+                        
+                        # Clear progress indicators
+                        progress_bar.progress(1.0)
+                        status_text.empty()
+                        stats_text.empty()
+                        
+                        # Check if search was stopped
+                        was_stopped = st.session_state.get('search_stopped', False)
+                        
+                        if was_stopped:
+                            st.warning(f"⏹️ Search stopped by user. Found {len(found_profiles) if found_profiles else 0} supervisors.")
+                            status_text.warning("⏹️ Search was stopped. You can export the results found so far.")
+                        else:
+                            st.success("✅ Pipeline completed successfully!")
+                        
+                        # Export results (even if stopped)
+                        if found_profiles and len(found_profiles) > 0:
+                            # Export to temporary file for download
+                            from app.modules.export_excel import export_to_excel
+                            export_to_excel(found_profiles, output_path)
+                            
+                            if output_path.exists():
+                                with open(output_path, "rb") as f:
+                                    st.download_button(
+                                        label=f"📥 Download Results (Excel) - {len(found_profiles)} supervisors",
+                                        data=f.read(),
+                                        file_name="supervisors.xlsx",
+                                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                        use_container_width=True
+                                    )
+                            
+                            # Show updated subscription info (only if not stopped)
+                            if not was_stopped:
+                                from app.modules.subscription import get_user_subscription
+                                subscription = get_user_subscription(st.session_state.user_id)
+                                if subscription:
+                                    st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                        else:
+                            st.error("No supervisors found.")
+                    except KeyboardInterrupt:
+                        # Handle manual stop
+                        st.session_state.search_stopped = True
+                        if st.session_state.partial_results:
+                            st.warning(f"⏹️ Search interrupted. Found {len(st.session_state.partial_results)} supervisors so far.")
+                        else:
+                            st.warning("⏹️ Search interrupted. No results found yet.")
+                        st.rerun()
             
             except ValueError as e:
                 # Subscription-related errors

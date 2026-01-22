@@ -28,7 +28,8 @@ class ProfileExtractor:
             "Postdoc", "Postdoctoral", "Post-doctoral", "Post Doctoral",
             "Research Fellow", "Junior Research Fellow", "Senior Research Fellow",
             "Research Associate", "Research Assistant", "Teaching Assistant",
-            "Lecturer", "Senior Lecturer"  # Exclude lecturers as they're typically not supervisors
+            "Lecturer", "Senior Lecturer",  # Exclude lecturers as they're typically not supervisors
+            "Emeritus Professor", "Emeritus", "Professor Emeritus"  # Exclude emeritus professors
         ]
     
     def extract(
@@ -115,6 +116,14 @@ class ProfileExtractor:
         
         # Extract title (optional - don't reject if missing)
         title = self._extract_title(text_content)
+        
+        # Check if page is blank or has insufficient content
+        # Blank pages typically have only name, title, and basic contact info but no research content
+        if self._is_blank_profile_page(text_content, soup, url):
+            skip_reason = "blank_profile_page"
+            if debug:
+                print(f"  [DEBUG] Skipped {url[:60]}: blank profile page (insufficient content)")
+            return None, skip_reason
         
         # Check if page contains academic title indicators
         # Required titles: Prof, Dr, Professor, Reader, Lecturer, Research Fellow, etc.
@@ -780,6 +789,94 @@ class ProfileExtractor:
         
         return None
     
+    def _is_blank_profile_page(self, text_content: str, soup: BeautifulSoup, url: str) -> bool:
+        """Check if this is a blank profile page with insufficient content.
+        
+        Blank pages typically have:
+        - Only name, title, email, basic contact info
+        - No research keywords, publications, biography, research interests
+        - Very short content (< 300 characters of meaningful text)
+        - No research-related sections
+        
+        Examples of blank pages:
+        - https://medicine-psychology.anu.edu.au/people/dr-kerrie-aust
+        - https://www.liverpool.ac.uk/people/yu-lin-lu
+        """
+        text_lower = text_content.lower()
+        text_length = len(text_content.strip())
+        
+        # Remove common navigation/menu text to get actual content length
+        navigation_keywords = [
+            "skip to main content", "menu", "navigation", "search", "contact us", 
+            "about us", "home", "staff", "news", "events", "alumni", "current students",
+            "study", "research", "people", "services", "our impact", "partner with us"
+        ]
+        content_text = text_content
+        for nav_keyword in navigation_keywords:
+            content_text = content_text.replace(nav_keyword, "")
+        meaningful_length = len(content_text.strip())
+        
+        # If meaningful content is very short, likely blank
+        if meaningful_length < 300:
+            return True
+        
+        # Check for research-related content indicators
+        research_indicators = [
+            "research", "publication", "biography", "bio", "interest", "expertise",
+            "field", "area", "focus", "project", "grant", "award", "education",
+            "experience", "background", "work", "study", "investigation", "method",
+            "analysis", "theory", "model", "approach", "contribution", "journal",
+            "conference", "paper", "article", "book", "chapter", "thesis", "dissertation",
+            "teaching", "supervision", "student", "phd", "doctoral", "postgraduate"
+        ]
+        
+        # Count research indicators
+        research_indicator_count = sum(1 for indicator in research_indicators if indicator in text_lower)
+        
+        # If very few research indicators and short content, likely blank
+        if research_indicator_count < 3 and meaningful_length < 500:
+            return True
+        
+        # Check if page has meaningful content sections
+        # Look for common profile sections that indicate substantial content
+        content_sections = soup.find_all(['section', 'div', 'article'], class_=re.compile(
+            r'biography|bio|research|publication|interest|expertise|education|experience|background|profile-content|person-details|content',
+            re.I
+        ))
+        
+        # Also check for headings that indicate content sections
+        content_headings = soup.find_all(['h2', 'h3', 'h4'], string=re.compile(
+            r'research|publication|biography|interest|expertise|education|experience|background|teaching|supervision',
+            re.I
+        ))
+        
+        # If no content sections/headings found and text is short, likely blank
+        if len(content_sections) == 0 and len(content_headings) == 0 and meaningful_length < 400:
+            return True
+        
+        # Check if text is mostly navigation/menu items
+        navigation_count = sum(1 for keyword in navigation_keywords if keyword in text_lower)
+        
+        # If mostly navigation and very little actual content, likely blank
+        if navigation_count > 8 and meaningful_length < 500:
+            return True
+        
+        # Check for pages that only have name, title, email, and affiliation
+        # These are typically blank pages
+        basic_info_patterns = [
+            r'\bdr\s+[a-z\s]+\b',  # Name
+            r'\bprofessor\b|\bprof\b|\blecturer\b',  # Title
+            r'[a-z]+@[a-z\.]+\.[a-z]+',  # Email
+            r'\buniversity\b|\binstitution\b|\bschool\b|\bdepartment\b'  # Affiliation
+        ]
+        
+        # If text mostly matches basic info patterns and is short, likely blank
+        basic_info_matches = sum(1 for pattern in basic_info_patterns if re.search(pattern, text_lower))
+        if basic_info_matches >= 3 and meaningful_length < 400 and research_indicator_count < 2:
+            return True
+        
+        return False
+    
     def _is_acceptable_title(self, text_content: str, extracted_title: Optional[str], university: Optional[University] = None) -> bool:
         """Check if the person has an acceptable title (Assistant Professor and above).
         
@@ -840,6 +937,10 @@ class ProfileExtractor:
             r'\bresearch\s+associate\b',
             r'\bresearch\s+assistant\b',
             r'\bteaching\s+assistant\b',
+            # Exclude emeritus professors (always exclude, regardless of university)
+            r'\bemeritus\s+professor\b',
+            r'\bprofessor\s+emeritus\b',
+            r'\bemeritus\b',  # Standalone "emeritus" in title context
         ]
         
         # Only exclude lecturer titles for non-UK universities

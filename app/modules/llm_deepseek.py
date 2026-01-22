@@ -68,7 +68,7 @@ class DeepSeekClient:
             keywords = "No explicit keywords provided - extract from CV"
         
         system_prompt = """You are a PhD supervisor search assistant. From the user's CV text and keywords, output strict JSON:
-- core_keywords (10-20): PRIMARY, HIGH-LEVEL, GENERAL research field terms 
+- core_keywords (5-8): PRIMARY, HIGH-LEVEL, GENERAL research field terms 
   CRITICAL: Use ONLY broad, high-level research field terms. DO NOT include:
     - Specific technical terms (e.g., "NSCLC", "CRISPR-Cas9", "EGFR-TKI resistance")
     - Gene names, protein names, or molecular pathways
@@ -91,7 +91,7 @@ class DeepSeekClient:
   
   Examples of BAD keywords: "NSCLC", "EGFR mutation", "CRISPR gene editing", "single-cell RNA sequencing"
   
-- adjacent_keywords (10-20): related/broader HIGH-LEVEL terms that are RELEVANT to the same field category
+- adjacent_keywords (3-5): related/broader HIGH-LEVEL terms that are RELEVANT to the same field category
   IMPORTANT: Match the field category of core_keywords:
     - If core_keywords are psychology/education: use terms like "psychology", "education", "cognitive sciences", "behavioral sciences", "human development", "social sciences", "educational research"
     - If core_keywords are medical/clinical: use terms like "biomedical research", "medical sciences", "health sciences", "clinical sciences", "public health"
@@ -99,7 +99,7 @@ class DeepSeekClient:
   
   Same rules: only high-level, general terms. Think of terms that describe research AREAS, not specific projects or techniques.
 
-- negative_keywords (5-10): terms to exclude - ONLY include fields that are COMPLETELY unrelated to the research area
+- negative_keywords (3-5): terms to exclude - ONLY include fields that are COMPLETELY unrelated to the research area
   CRITICAL: DO NOT include engineering, computer science, physics, chemistry, mathematics, or other STEM fields as negative keywords, as these may be relevant.
   IMPORTANT: If the research is in psychology/education (e.g., music therapy), DO include "clinical medicine", "medical sciences" as negative keywords if they are NOT the primary context. This prevents over-association with medical fields.
   Only include truly unrelated fields like: political science, economics (if not relevant), literature (if not arts-related research), etc.
@@ -108,7 +108,7 @@ class DeepSeekClient:
   - For psychology/education: "Psychology", "Education", "Music Education", "Educational Psychology", "Counseling", "Human Development"
   - For medical/clinical: "Medicine", "Health Sciences", "Rehabilitation Medicine", "Clinical Medicine"
   
-- query_templates (5-10): search templates, MUST include placeholder site:{domain}
+- query_templates (3-5): search templates, MUST include placeholder site:{domain}
 
 CRITICAL: 
 1. Focus ONLY on HIGH-LEVEL, GENERAL research fields
@@ -144,7 +144,7 @@ Do NOT include specific technical terms, gene names, methodologies, or detailed 
     def extract_profile_keywords(self, page_text: str, research_profile: ResearchProfile) -> ProfileExtraction:
         """Extract keywords and fit score from profile page."""
         system_prompt = """Given a supervisor profile page text and the user research profile, output strict JSON:
-- keywords (5-12): HIGH-LEVEL, GENERAL research keywords from this supervisor's profile
+- keywords (3-5): HIGH-LEVEL, GENERAL research keywords from this supervisor's profile
   CRITICAL: Extract ONLY broad, high-level research field terms. DO NOT include:
     - Specific technical terms, gene names, protein names, or molecular pathways
     - Specific methodologies or techniques (e.g., "RNA-seq", "CRISPR", "flow cytometry")
@@ -172,7 +172,7 @@ Extract ONLY HIGH-LEVEL, GENERAL research keywords from the supervisor's profile
     
     def select_directory_urls(self, candidate_urls: list[str], domain: str) -> DirectorySelection:
         """Select best directory URLs from candidates."""
-        system_prompt = """You are given candidate URLs for a university domain. Choose 5-10 most likely staff/faculty/people directory pages.
+        system_prompt = """You are given candidate URLs for a university domain. Choose 3-5 most likely staff/faculty/people directory pages.
 Output JSON: { "directory_urls": [ ... ] }"""
         
         user_prompt = f"Domain: {domain}\n\nCandidate URLs:\n" + "\n".join(candidate_urls[:50])

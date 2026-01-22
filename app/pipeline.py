@@ -27,6 +27,22 @@ from app.modules.subscription import can_perform_search, consume_search
 console = Console()
 
 
+def is_emeritus_profile(profile: SupervisorProfile) -> bool:
+    """Check if profile is an Emeritus Professor.
+    
+    Args:
+        profile: SupervisorProfile to check
+        
+    Returns:
+        True if profile title contains "emeritus" (case-insensitive), False otherwise
+    """
+    if not profile.title:
+        return False
+    title_lower = profile.title.lower()
+    emeritus_patterns = ["emeritus professor", "professor emeritus", "emeritus"]
+    return any(pattern in title_lower for pattern in emeritus_patterns)
+
+
 def _infer_domain_from_institution(institution: str, country: str) -> str:
     """Infer domain from institution name when domain is missing."""
     institution_lower = institution.lower()
@@ -205,6 +221,9 @@ def retrieve_local_candidates(
         
         local_profiles = filtered_profiles
     
+    # Filter out Emeritus Professors from local database results
+    local_profiles = [p for p in local_profiles if not is_emeritus_profile(p)]
+    
     # Score each candidate
     scored_profiles = []
     for profile in local_profiles:
@@ -234,8 +253,9 @@ def run_pipeline(
     target: int = TARGET_SUPERVISORS,
     local_first: bool = True,
     user_id: Optional[int] = None,
-    progress_callback: Optional[Any] = None  # Callable[[str, float, str], None] - simplified for compatibility
-) -> None:
+    progress_callback: Optional[Any] = None,  # Callable[[str, float, str], None] - simplified for compatibility
+    stop_flag: Optional[Any] = None  # Callable[[], bool] - function to check if should stop
+) -> List[SupervisorProfile]:
     """Run the full supervisor discovery pipeline.
     
     Args:
@@ -458,6 +478,13 @@ def run_pipeline(
             HEARTBEAT_INTERVAL = 3  # Send heartbeat every 3 seconds minimum
             
             for idx, university in enumerate(universities):
+                # Check stop flag before processing each university
+                if stop_flag and stop_flag():
+                    console.print(f"[yellow]Search stopped by user. Found {len(online_profiles)} supervisors so far.[/yellow]")
+                    if progress_callback:
+                        progress_callback("stopped", 0.85, f"Search stopped. Found {len(online_profiles)} supervisors so far.")
+                    break
+                
                 progress.update(task, description=f"Processing {university.institution}...")
                 
                 current_time = time.time()
@@ -541,6 +568,15 @@ def run_pipeline(
                 
                 progress.advance(task)
         
+        # Check stop flag before validation
+        if stop_flag and stop_flag():
+            console.print(f"[yellow]Search stopped by user. Found {len(online_profiles)} supervisors so far.[/yellow]")
+            if progress_callback:
+                progress_callback("stopped", 0.85, f"Search stopped. Found {len(online_profiles)} supervisors so far.")
+            # Return partial results
+            all_profiles.extend(online_profiles)
+            # Continue to final selection with what we have
+        
         # Validate and deduplicate online profiles
         console.print("[yellow]Validating and deduplicating online profiles...[/yellow]")
         if progress_callback:
@@ -548,6 +584,9 @@ def run_pipeline(
         valid_online = []
         validation_dropped = 0
         for p in online_profiles:
+            # Check stop flag during validation
+            if stop_flag and stop_flag():
+                break
             is_valid, reason = validate_profile(p)
             if is_valid:
                 valid_online.append(p)
@@ -567,6 +606,13 @@ def run_pipeline(
             profile.fit_score = fit_score
             profile.tier = tier
             profile.matched_terms = matched_terms
+            
+            # Special handling: If fit_score is 0.0, it means the profile was rejected
+            # (e.g., arts context requirement not met)
+            if fit_score == 0.0 and len(matched_terms) == 0:
+                # Profile was rejected by scoring function (e.g., arts context mismatch)
+                console.print(f"    [dim]Filtered out {profile.name} ({profile.institution}): arts context mismatch or other rejection[/dim]")
+                continue
             
             # Check if this is a PI (Principal Investigator)
             # PI should be saved even with low fit_score if they are valid supervisors
@@ -672,11 +718,18 @@ def run_pipeline(
         progress_callback("final_selection", 0.92, f"Final selection from {len(all_profiles)} candidates...")
     unique_profiles = deduplicate_profiles(all_profiles)
     
+    # Filter out Emeritus Professors before final selection
+    profiles_before_emeritus = len(unique_profiles)
+    unique_profiles = [p for p in unique_profiles if not is_emeritus_profile(p)]
+    emeritus_count = profiles_before_emeritus - len(unique_profiles)
+    if emeritus_count > 0:
+        console.print(f"  [dim]Excluded {emeritus_count} Emeritus Professor(s)[/dim]")
+    
     # Apply diversity constraints based on subscription type
     if is_free_user:
         # Free users: 10 supervisors, max 1 per institution, minimum 3 institutions
         final_profiles = select_with_diversity(unique_profiles, n=10, max_per_institution=1, min_institutions=3)
-        console.print(f"[yellow]Free trial: Selected 10 supervisors from different institutions (minimum 3 schools)[/yellow]")
+        console.print(f"[yellow]Free trial: Selected {len(final_profiles)} supervisors from different institutions (minimum 3 schools)[/yellow]")
     else:
         # Paid users: target supervisors (default 100), max 10 per institution
         final_profiles = select_with_diversity(unique_profiles, n=target, max_per_institution=10)
@@ -684,6 +737,15 @@ def run_pipeline(
     core_count = sum(1 for p in final_profiles if p.tier == "Core")
     # Show diversity statistics
     institutions_in_results = len(set(p.institution.lower().strip() if p.institution else "" for p in final_profiles))
+    
+    # Check if we met the target
+    target_met = len(final_profiles) >= target if not is_free_user else len(final_profiles) >= 10
+    if not target_met:
+        console.print(f"[yellow]⚠️  Warning: Only found {len(final_profiles)} supervisors (target: {target if not is_free_user else 10})[/yellow]")
+        console.print(f"[dim]  Fit score threshold was relaxed to meet target count[/dim]")
+    else:
+        console.print(f"[green]✓ Selected {len(final_profiles)} supervisors (target: {target if not is_free_user else 10})[/green]")
+    
     console.print(f"  Selected {len(final_profiles)} supervisors ({core_count} Core, {len(final_profiles) - core_count} Adjacent)")
     console.print(f"  From {institutions_in_results} different institutions")
     if progress_callback:
@@ -734,6 +796,9 @@ def run_pipeline(
             updated_sub = get_user_subscription(user_id)
             if updated_sub:
                 console.print(f"[green]Subscription: {updated_sub['remaining_searches']} searches remaining[/green]")
+    
+    # Return the final profiles list (for potential early stop/export)
+    return final_profiles
 
 
 def process_university(university: University, research_profile: ResearchProfile) -> Tuple[List[SupervisorProfile], Dict]:

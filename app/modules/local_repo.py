@@ -13,25 +13,37 @@ from app.db_cloud import get_db_connection
 
 
 def _is_postgresql(conn) -> bool:
-    """Check if connection is PostgreSQL."""
+    """Check if connection is PostgreSQL.
+    
+    Uses multiple methods for reliable detection:
+    1. Check DB_TYPE from config (most reliable)
+    2. Check connection module name
+    3. Try PostgreSQL-specific query as last resort
+    """
+    # First, check DB_TYPE from config (most reliable, no query needed)
+    from app.config import get_secret
+    db_type = get_secret("DB_TYPE", "sqlite").lower()
+    if db_type == "postgresql":
+        return True
+    
+    # Second, check connection module name
     try:
-        # Check connection module name (psycopg2 for PostgreSQL, sqlite3 for SQLite)
         module_name = conn.__class__.__module__
         if 'psycopg2' in module_name or 'psycopg' in module_name:
             return True
-        
-        # Also try to execute a PostgreSQL-specific query as fallback
+    except Exception:
+        pass
+    
+    # Last resort: try PostgreSQL-specific query (but this might fail on SQLite)
+    try:
         cursor = conn.cursor()
         cursor.execute("SELECT version()")
         version = cursor.fetchone()[0]
         if isinstance(version, str) and "PostgreSQL" in version:
             return True
     except Exception:
-        # If query fails, check DB_TYPE from config
-        from app.config import get_secret
-        db_type = get_secret("DB_TYPE", "sqlite").lower()
-        if db_type == "postgresql":
-            return True
+        # If query fails, assume SQLite
+        pass
     
     # Default: assume SQLite
     return False
@@ -279,14 +291,23 @@ def query_candidates(
         # PostgreSQL doesn't support SQLite FTS5, always use LIKE for PostgreSQL
         # For SQLite, try FTS5 first, fallback to LIKE
         fts_exists = False
+        
+        # Only check for FTS5 on SQLite (never on PostgreSQL)
+        # Double-check is_pg to be absolutely sure
         if not is_pg:
-            # SQLite only: Check if FTS5 table exists
+            # Verify it's really SQLite by checking connection type again
             try:
-                # Only query sqlite_master on SQLite databases
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='supervisors_fts'")
-                fts_exists = cursor.fetchone() is not None
+                module_name = conn.__class__.__module__
+                if 'sqlite' in module_name.lower():
+                    # SQLite only: Check if FTS5 table exists
+                    try:
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='supervisors_fts'")
+                        fts_exists = cursor.fetchone() is not None
+                    except Exception:
+                        # If query fails, FTS5 is not available
+                        fts_exists = False
             except Exception:
-                # If query fails (e.g., on PostgreSQL), FTS5 is not available
+                # If we can't verify, don't use FTS5
                 fts_exists = False
         
         if fts_exists and not is_pg:

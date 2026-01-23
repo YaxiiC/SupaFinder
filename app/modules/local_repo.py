@@ -15,14 +15,26 @@ from app.db_cloud import get_db_connection
 def _is_postgresql(conn) -> bool:
     """Check if connection is PostgreSQL."""
     try:
-        # Try to execute a PostgreSQL-specific query
+        # Check connection module name (psycopg2 for PostgreSQL, sqlite3 for SQLite)
+        module_name = conn.__class__.__module__
+        if 'psycopg2' in module_name or 'psycopg' in module_name:
+            return True
+        
+        # Also try to execute a PostgreSQL-specific query as fallback
         cursor = conn.cursor()
         cursor.execute("SELECT version()")
         version = cursor.fetchone()[0]
-        return "PostgreSQL" in version
-    except:
-        # If query fails, assume SQLite
-        return False
+        if isinstance(version, str) and "PostgreSQL" in version:
+            return True
+    except Exception:
+        # If query fails, check DB_TYPE from config
+        from app.config import get_secret
+        db_type = get_secret("DB_TYPE", "sqlite").lower()
+        if db_type == "postgresql":
+            return True
+    
+    # Default: assume SQLite
+    return False
 
 
 def upsert_supervisor(profile: SupervisorProfile, domain: Optional[str] = None) -> None:
@@ -204,13 +216,17 @@ def query_candidates(
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # Check database type early for parameter placeholder
+    is_pg = _is_postgresql(conn)
+    param_placeholder = "%s" if is_pg else "?"
+    
     # Build WHERE clause
     where_clauses = []
     params = []
     
     if constraints:
         if "regions" in constraints and constraints["regions"]:
-            placeholders = ",".join(["?"] * len(constraints["regions"]))
+            placeholders = ",".join([param_placeholder] * len(constraints["regions"]))
             where_clauses.append(f"LOWER(region) IN ({placeholders})")
             params.extend([r.strip().lower() for r in constraints["regions"]])
             if debug:
@@ -218,14 +234,14 @@ def query_candidates(
         
         # Support both "countries" (list) and "country" (single, for backward compatibility)
         if "countries" in constraints and constraints["countries"]:
-            placeholders = ",".join(["?"] * len(constraints["countries"]))
+            placeholders = ",".join([param_placeholder] * len(constraints["countries"]))
             where_clauses.append(f"LOWER(country) IN ({placeholders})")
             params.extend([c.strip().lower() for c in constraints["countries"]])
             if debug:
                 print(f"  [DEBUG] Country filter: {constraints['countries']}")
         elif "country" in constraints and constraints["country"]:
             # Backward compatibility: single country
-            where_clauses.append("LOWER(country) = ?")
+            where_clauses.append(f"LOWER(country) = {param_placeholder}")
             params.append(constraints["country"].strip().lower())
             if debug:
                 print(f"  [DEBUG] Country filter (single): {constraints['country']}")
@@ -235,10 +251,6 @@ def query_candidates(
         # We'll filter by matching institution names to universities list
     
     where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
-    
-    # Check database type for parameter placeholder
-    is_pg = _is_postgresql(conn)
-    param_placeholder = "%s" if is_pg else "?"
     
     # Build keyword search
     all_keywords = research_profile.core_keywords + research_profile.adjacent_keywords
@@ -266,15 +278,15 @@ def query_candidates(
         
         # PostgreSQL doesn't support SQLite FTS5, always use LIKE for PostgreSQL
         # For SQLite, try FTS5 first, fallback to LIKE
-        if is_pg:
-            # PostgreSQL: Use LIKE search directly
-            fts_exists = False
-        else:
-            # SQLite: Check if FTS5 table exists
+        fts_exists = False
+        if not is_pg:
+            # SQLite only: Check if FTS5 table exists
             try:
+                # Only query sqlite_master on SQLite databases
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='supervisors_fts'")
                 fts_exists = cursor.fetchone() is not None
-            except:
+            except Exception:
+                # If query fails (e.g., on PostgreSQL), FTS5 is not available
                 fts_exists = False
         
         if fts_exists and not is_pg:
@@ -283,9 +295,9 @@ def query_candidates(
                 fts_query = f"""
                     SELECT DISTINCT s.* FROM supervisors s
                     INNER JOIN supervisors_fts ON s.id = supervisors_fts.rowid
-                    WHERE {where_sql} AND supervisors_fts MATCH ?
+                    WHERE {where_sql} AND supervisors_fts MATCH {param_placeholder}
                     ORDER BY s.last_seen_at DESC
-                    LIMIT ?
+                    LIMIT {param_placeholder}
                 """
                 params_fts = params + [search_terms, limit]
                 if debug:

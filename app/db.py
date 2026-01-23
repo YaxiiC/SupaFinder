@@ -98,42 +98,42 @@ def init_db(db_path: Path = CACHE_DB) -> None:
     # Create FTS5 virtual table for full-text search (SQLite only)
     # PostgreSQL doesn't support FTS5, skip it for PostgreSQL
     if not is_pg:
-        try:
-            cursor.execute("""
-                CREATE VIRTUAL TABLE IF NOT EXISTS supervisors_fts USING fts5(
-                    name,
-                    institution,
-                    title,
-                    keywords_text,
-                    content='supervisors',
-                    content_rowid='id'
-                )
-            """)
-            
-            # Create triggers to keep FTS5 in sync
-            cursor.execute("""
-                CREATE TRIGGER IF NOT EXISTS supervisors_fts_insert AFTER INSERT ON supervisors BEGIN
-                    INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
-                    VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
-                END
-            """)
-            
-            cursor.execute("""
-                CREATE TRIGGER IF NOT EXISTS supervisors_fts_delete AFTER DELETE ON supervisors BEGIN
-                    DELETE FROM supervisors_fts WHERE rowid = old.id;
-                END
-            """)
-            
-            cursor.execute("""
-                CREATE TRIGGER IF NOT EXISTS supervisors_fts_update AFTER UPDATE ON supervisors BEGIN
-                    DELETE FROM supervisors_fts WHERE rowid = old.id;
-                    INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
-                    VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
-                END
-            """)
-        except sqlite3.OperationalError:
-            # FTS5 might not be available, skip it
-            pass
+    try:
+        cursor.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS supervisors_fts USING fts5(
+                name,
+                institution,
+                title,
+                keywords_text,
+                content='supervisors',
+                content_rowid='id'
+            )
+        """)
+        
+        # Create triggers to keep FTS5 in sync
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS supervisors_fts_insert AFTER INSERT ON supervisors BEGIN
+                INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
+                VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
+            END
+        """)
+        
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS supervisors_fts_delete AFTER DELETE ON supervisors BEGIN
+                DELETE FROM supervisors_fts WHERE rowid = old.id;
+            END
+        """)
+        
+        cursor.execute("""
+            CREATE TRIGGER IF NOT EXISTS supervisors_fts_update AFTER UPDATE ON supervisors BEGIN
+                DELETE FROM supervisors_fts WHERE rowid = old.id;
+                INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
+                VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
+            END
+        """)
+    except sqlite3.OperationalError:
+        # FTS5 might not be available, skip it
+        pass
     
     conn.commit()
     conn.close()
@@ -186,10 +186,10 @@ def cache_page(url: str, html: str, text_content: str, status_code: int, db_path
         """, (url, html, text_content, datetime.now().isoformat(), status_code))
     else:
         # SQLite uses INSERT OR REPLACE
-        cursor.execute("""
-            INSERT OR REPLACE INTO page_cache (url, html, text_content, fetched_at, status_code)
-            VALUES (?, ?, ?, ?, ?)
-        """, (url, html, text_content, datetime.now().isoformat(), status_code))
+    cursor.execute("""
+        INSERT OR REPLACE INTO page_cache (url, html, text_content, fetched_at, status_code)
+        VALUES (?, ?, ?, ?, ?)
+    """, (url, html, text_content, datetime.now().isoformat(), status_code))
     
     conn.commit()
     conn.close()
@@ -231,10 +231,10 @@ def cache_profile(url: str, profile: dict, db_path: Path = CACHE_DB) -> None:
         """, (url, json.dumps(profile), datetime.now().isoformat()))
     else:
         # SQLite uses INSERT OR REPLACE
-        cursor.execute("""
-            INSERT OR REPLACE INTO extracted_profiles (url, profile_json, extracted_at)
-            VALUES (?, ?, ?)
-        """, (url, json.dumps(profile), datetime.now().isoformat()))
+    cursor.execute("""
+        INSERT OR REPLACE INTO extracted_profiles (url, profile_json, extracted_at)
+        VALUES (?, ?, ?)
+    """, (url, json.dumps(profile), datetime.now().isoformat()))
     
     conn.commit()
     conn.close()

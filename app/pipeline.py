@@ -233,6 +233,26 @@ def retrieve_local_candidates(
         profile.matched_terms = matched_terms
         scored_profiles.append(profile)
     
+    # Check if there's at least one exact keyword match in any supervisor
+    # If no exact match, return empty list to trigger online search
+    all_keywords = [k.lower().strip() for k in research_profile.core_keywords + research_profile.adjacent_keywords]
+    
+    has_exact_match = False
+    for profile in scored_profiles:
+        # Check if this supervisor has at least one exact keyword match
+        supervisor_keywords_normalized = [kw.lower().strip() for kw in profile.keywords]
+        for keyword in all_keywords:
+            if keyword in supervisor_keywords_normalized:
+                has_exact_match = True
+                break
+        if has_exact_match:
+            break
+    
+    # If no exact match found in any supervisor, return empty list to trigger online search
+    if not has_exact_match and len(scored_profiles) > 0:
+        console.print(f"  [yellow]No exact keyword match found in local database ({len(scored_profiles)} candidates found but none with exact keyword match). Proceeding to online search...[/yellow]")
+        return []
+    
     return scored_profiles
 
 

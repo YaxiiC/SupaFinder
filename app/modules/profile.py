@@ -413,7 +413,7 @@ class ProfileExtractor:
                 "funding", "admission", "application", "registration"
             ]
             if words[0] in single_word_blacklist:
-                return False
+            return False
         
         # Reject academic/program names (e.g., "Taught Masters Mechanical Engineering")
         academic_terms = [

@@ -301,15 +301,15 @@ def query_candidates(
                 if 'sqlite' in module_name.lower():
                     # SQLite only: Check if FTS5 table exists
                     try:
-                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='supervisors_fts'")
-                        fts_exists = cursor.fetchone() is not None
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='supervisors_fts'")
+            fts_exists = cursor.fetchone() is not None
                     except Exception:
                         # If query fails, FTS5 is not available
                         fts_exists = False
             except Exception:
                 # If we can't verify, don't use FTS5
                 fts_exists = False
-        
+            
         if fts_exists and not is_pg:
             # Try FTS5 (SQLite only)
             try:
@@ -326,10 +326,10 @@ def query_candidates(
                     print(f"  [DEBUG] Query: {fts_query}")
                     print(f"  [DEBUG] Search terms: {search_terms}")
                     print(f"  [DEBUG] Params: {params_fts}")
-                cursor.execute(fts_query, params_fts)
+                    cursor.execute(fts_query, params_fts)
             except Exception as e:
-                if debug:
-                    print(f"  [DEBUG] FTS5 query failed: {e}, falling back to LIKE")
+                    if debug:
+                        print(f"  [DEBUG] FTS5 query failed: {e}, falling back to LIKE")
                 # Fall through to LIKE search
                 fts_exists = False
         

@@ -103,59 +103,59 @@ def select_with_diversity(
         for max_per_inst in max_per_inst_options:
             # Filter profiles based on current threshold
             # Start with matched_terms requirement
-            filtered_profiles = [
-                p for p in profiles 
+    filtered_profiles = [
+        p for p in profiles 
                 if p.fit_score > threshold and len(p.matched_terms) > 0
-            ]
-            
+    ]
+    
             if len(filtered_profiles) == 0:
                 continue  # Try next threshold
             
             # We have some candidates, proceed with selection
-            scored = score_and_tier(filtered_profiles)
-            ranked = rank_profiles(scored)
+    scored = score_and_tier(filtered_profiles)
+    ranked = rank_profiles(scored)
+    
+    # Apply diversity constraint
+    selected = []
+    institution_count = {}  # Track count per institution
+    unique_institutions = set()  # Track unique institutions
+    
+    # First pass: Try to ensure minimum institutions coverage
+    if min_institutions > 1:
+        by_institution = {}
+        for profile in ranked:
+            institution = profile.institution.lower().strip() if profile.institution else ""
+            if institution not in by_institution:
+                by_institution[institution] = []
+            by_institution[institution].append(profile)
+        
+        institutions_sorted = sorted(
+            by_institution.keys(),
+            key=lambda inst: max(p.fit_score for p in by_institution[inst]) if by_institution[inst] else 0,
+            reverse=True
+        )
+        
+        for institution in institutions_sorted[:min_institutions]:
+            if len(selected) < n and by_institution[institution]:
+                profile = by_institution[institution][0]
+                selected.append(profile)
+                institution_count[institution] = 1
+                unique_institutions.add(institution)
+    
+    # Second pass: Fill remaining slots with diversity constraint
+    for profile in ranked:
+        if profile in selected:
+            continue
             
-            # Apply diversity constraint
-            selected = []
-            institution_count = {}  # Track count per institution
-            unique_institutions = set()  # Track unique institutions
-            
-            # First pass: Try to ensure minimum institutions coverage
-            if min_institutions > 1:
-                by_institution = {}
-                for profile in ranked:
-                    institution = profile.institution.lower().strip() if profile.institution else ""
-                    if institution not in by_institution:
-                        by_institution[institution] = []
-                    by_institution[institution].append(profile)
-                
-                institutions_sorted = sorted(
-                    by_institution.keys(),
-                    key=lambda inst: max(p.fit_score for p in by_institution[inst]) if by_institution[inst] else 0,
-                    reverse=True
-                )
-                
-                for institution in institutions_sorted[:min_institutions]:
-                    if len(selected) < n and by_institution[institution]:
-                        profile = by_institution[institution][0]
-                        selected.append(profile)
-                        institution_count[institution] = 1
-                        unique_institutions.add(institution)
-            
-            # Second pass: Fill remaining slots with diversity constraint
-            for profile in ranked:
-                if profile in selected:
-                    continue
-                    
-                institution = profile.institution.lower().strip() if profile.institution else ""
-                current_count = institution_count.get(institution, 0)
-                
-                if len(selected) < n:
+        institution = profile.institution.lower().strip() if profile.institution else ""
+        current_count = institution_count.get(institution, 0)
+        
+        if len(selected) < n:
                     # Apply diversity constraint (or skip if max_per_inst is None)
                     if max_per_inst is None or current_count < max_per_inst:
-                        selected.append(profile)
-                        institution_count[institution] = current_count + 1
-                        unique_institutions.add(institution)
+                selected.append(profile)
+                institution_count[institution] = current_count + 1
+                unique_institutions.add(institution)
             
             # Update best result if this is better
             if len(selected) > len(best_result):
@@ -202,7 +202,7 @@ def select_with_diversity(
                     best_result = selected
                 
                 if len(selected) >= n:
-                    return selected
+    return selected
     
     # Strategy 3: If still not enough, return top N regardless of constraints
     if len(best_result) < n:
@@ -349,7 +349,7 @@ def score_supervisor(
             # Example: "music education" research should not match supervisor with only "music" (no education/psychology)
             # But "music" alone (without education/therapy) can still match "music" supervisors
             # So we only reject if research explicitly has domain terms
-            return (0.0, "Adjacent", [])
+        return (0.0, "Adjacent", [])
     
     # Score based on keyword matches
     core_matches = []

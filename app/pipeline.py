@@ -742,9 +742,11 @@ def run_pipeline(
     target_met = len(final_profiles) >= target if not is_free_user else len(final_profiles) >= 10
     if not target_met:
         console.print(f"[yellow]⚠️  Warning: Only found {len(final_profiles)} supervisors (target: {target if not is_free_user else 10})[/yellow]")
-        console.print(f"[dim]  Fit score threshold was relaxed to meet target count[/dim]")
+        console.print(f"[dim]  All available supervisors have been included. Threshold and diversity constraints were relaxed to maximize results.[/dim]")
+        console.print(f"[dim]  This may happen if the search criteria are very specific or if there are limited matching supervisors in the database.[/dim]")
     else:
         console.print(f"[green]✓ Selected {len(final_profiles)} supervisors (target: {target if not is_free_user else 10})[/green]")
+        console.print(f"[dim]  Target count met by adjusting thresholds and constraints as needed.[/dim]")
     
     console.print(f"  Selected {len(final_profiles)} supervisors ({core_count} Core, {len(final_profiles) - core_count} Adjacent)")
     console.print(f"  From {institutions_in_results} different institutions")

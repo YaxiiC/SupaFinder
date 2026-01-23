@@ -2,11 +2,13 @@
 """Clean up database to make it lightweight.
 
 This script:
-1. Removes old page cache (older than 7 days)
+1. Removes ALL page cache (main space consumer, ~300MB+ for 2972 entries)
 2. Removes extracted_profiles table data
 3. Removes evidence_snippets_json (keeps only essential supervisor info)
 4. VACUUM database to reclaim space
 5. Shows before/after size comparison
+
+Note: Page cache can be regenerated when needed during searches.
 """
 
 import sys
@@ -39,7 +41,7 @@ def format_size(size_bytes: int) -> str:
     return f"{size_bytes:.2f} TB"
 
 
-def cleanup_database(db_path: Path, keep_cache_days: int = 7) -> dict:
+def cleanup_database(db_path: Path, keep_cache_days: int = 0) -> dict:
     """Clean up database and return statistics."""
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
@@ -59,12 +61,14 @@ def cleanup_database(db_path: Path, keep_cache_days: int = 7) -> dict:
     console.print("[yellow]Starting database cleanup...[/yellow]")
     console.print()
     
-    # 1. Delete old page cache (older than keep_cache_days)
-    console.print(f"[cyan]1. Cleaning page cache (keeping last {keep_cache_days} days)...[/cyan]")
-    cutoff_date = (datetime.now() - timedelta(days=keep_cache_days)).isoformat()
-    cursor.execute("DELETE FROM page_cache WHERE datetime(fetched_at) < datetime(?)", (cutoff_date,))
+    # 1. Delete ALL page cache (can be regenerated when needed)
+    # Page cache is the main space consumer - HTML content is very large
+    console.print(f"[cyan]1. Cleaning page cache (deleting all entries)...[/cyan]")
+    cursor.execute("SELECT COUNT(*) FROM page_cache")
+    cache_count_before = cursor.fetchone()[0]
+    cursor.execute("DELETE FROM page_cache")
     stats['page_cache_deleted'] = cursor.rowcount
-    console.print(f"   [green]Deleted {stats['page_cache_deleted']} old cache entries[/green]")
+    console.print(f"   [green]Deleted {stats['page_cache_deleted']} cache entries (freed significant space)[/green]")
     
     # 2. Delete all extracted_profiles (not needed, can be regenerated)
     console.print("[cyan]2. Cleaning extracted_profiles table...[/cyan]")
@@ -90,7 +94,7 @@ def cleanup_database(db_path: Path, keep_cache_days: int = 7) -> dict:
     
     # 6. VACUUM to reclaim space
     console.print()
-    console.print("[cyan]4. Running VACUUM to reclaim space...[/cyan]")
+    console.print("[cyan]5. Running VACUUM to reclaim space...[/cyan]")
     console.print("   [dim]This may take a few minutes for large databases...[/dim]")
     cursor.execute("VACUUM")
     console.print("   [green]✓ VACUUM completed[/green]")
@@ -154,8 +158,8 @@ def main():
         console.print("[yellow]Aborted.[/yellow]")
         return
     
-    # Perform cleanup
-    stats = cleanup_database(db_path, keep_cache_days=7)
+    # Perform cleanup (keep_cache_days=0 means delete ALL cache)
+    stats = cleanup_database(db_path, keep_cache_days=0)
     
     # Show results
     console.print()
@@ -176,7 +180,7 @@ def main():
     results_table.add_row(
         "Page Cache",
         f"{stats['page_cache_deleted']} deleted",
-        "Kept last 7 days",
+        "All deleted (~300MB+ freed)",
         f"{stats['page_cache_deleted']} entries"
     )
     results_table.add_row(

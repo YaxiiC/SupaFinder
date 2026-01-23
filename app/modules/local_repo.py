@@ -142,9 +142,32 @@ def upsert_supervisor(profile: SupervisorProfile, domain: Optional[str] = None) 
 
 
 def upsert_many(profiles: List[SupervisorProfile], domain: Optional[str] = None) -> None:
-    """Upsert multiple supervisor profiles."""
+    """
+    Upsert multiple supervisor profiles.
+    
+    After batch update, automatically runs lightweight cleanup to keep database size manageable.
+    """
     for profile in profiles:
         upsert_supervisor(profile, domain)
+    
+    # Auto cleanup after batch update (lightweight - only page_cache)
+    # This helps keep database size manageable without running expensive VACUUM
+    try:
+        from app.modules.db_cleanup import auto_cleanup_page_cache
+        
+        # Only cleanup if we have a significant number of profiles (>= 10)
+        # This avoids cleanup overhead for small updates
+        if len(profiles) >= 10:
+            # Delete all page_cache entries (they can be regenerated during searches)
+            # Limit cache to 500 entries max to prevent database bloat
+            cleanup_stats = auto_cleanup_page_cache(keep_days=0, max_cache_entries=500)
+            if cleanup_stats.get('deleted', 0) > 0:
+                # Optional: log cleanup (commented out to avoid noise)
+                # print(f"Auto cleanup: deleted {cleanup_stats['deleted']} page_cache entries")
+                pass
+    except Exception:
+        # Don't fail if cleanup fails - it's optional and shouldn't break the main flow
+        pass
 
 
 def query_candidates(

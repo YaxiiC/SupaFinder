@@ -292,7 +292,7 @@ with st.sidebar:
         login_tab, register_tab = st.tabs(["Login", "Register"])
         
         with login_tab:
-        with st.form("login_form"):
+            with st.form("login_form"):
                 email = st.text_input("Email", placeholder="your.email@example.com", key="login_email")
                 password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
                 submit_login = st.form_submit_button("Login", use_container_width=True)
@@ -322,9 +322,9 @@ with st.sidebar:
                                 is_valid, user_id = verify_user_password(email_lower, password)
                                 if is_valid:
                                     st.session_state.user_email = email_lower
-                        st.session_state.user_id = user_id
-                        st.success("Logged in successfully!")
-                        st.rerun()
+                                    st.session_state.user_id = user_id
+                                    st.success("Logged in successfully!")
+                                    st.rerun()
                                 else:
                                     st.error("Invalid email or password. If you haven't set a password yet, please register first.")
                     except Exception as e:
@@ -750,44 +750,44 @@ else:
                 status_text.info("🔍 Starting search...")
                 st.write("🔴 DEBUG: Status initialized")
                 
-                    # Use built-in universities template
-                    from app.config import DATA_DIR
-                    uni_path = DATA_DIR / "universities_template.xlsx"
+                # Use built-in universities template
+                from app.config import DATA_DIR
+                uni_path = DATA_DIR / "universities_template.xlsx"
                 st.write(f"🔴 DEBUG: University path: {uni_path}")
-                    
-                    if not uni_path.exists():
-                        st.error(f"Universities template not found at {uni_path}")
-                        st.stop()
-                    
+                
+                if not uni_path.exists():
+                    st.error(f"Universities template not found at {uni_path}")
+                    st.stop()
+                
                 status_text.info("📁 Preparing files...")
                 st.write("🔴 DEBUG: Preparing files...")
                 
                 # Save uploaded CV to temp directory if provided
-                    with tempfile.TemporaryDirectory() as tmpdir:
-                        tmpdir = Path(tmpdir)
-                        
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmpdir = Path(tmpdir)
+                    
                     # Save CV if provided
                     cv_path = None
                     if cv_file:
                         cv_path = tmpdir / cv_file.name
                         cv_path.write_bytes(cv_file.read())
-                        
-                        # Output path
-                        output_path = tmpdir / "supervisors.xlsx"
-                        
-                        # Parse regions
-                        regions_list = [r.strip() for r in regions.split(",")] if regions else None
-                        
-                        # Parse countries
-                        countries_list = [c.strip() for c in countries.split(",")] if countries else None
-                        
-                        # Import and run pipeline
+                    
+                    # Output path
+                    output_path = tmpdir / "supervisors.xlsx"
+                    
+                    # Parse regions
+                    regions_list = [r.strip() for r in regions.split(",")] if regions else None
+                    
+                    # Parse countries
+                    countries_list = [c.strip() for c in countries.split(",")] if countries else None
+                    
+                    # Import and run pipeline
                     status_text.info("🔧 Initializing pipeline...")
                     st.write("🔴 DEBUG: Initializing pipeline...")
-                        from app.pipeline import run_pipeline
-                        from app.db_cloud import init_db
+                    from app.pipeline import run_pipeline
+                    from app.db_cloud import init_db
                     import inspect
-                        init_db()
+                    init_db()
                     st.write("🔴 DEBUG: Database initialized")
                     
                     # Check subscription before running
@@ -883,7 +883,7 @@ else:
                         if output_path.exists():
                             with open(output_path, "rb") as f:
                                 st.download_button(
-                                        label=f"📥 Download Results (Excel) - {len(found_profiles)} supervisors",
+                                    label=f"📥 Download Results (Excel) - {len(found_profiles)} supervisors",
                                     data=f.read(),
                                     file_name="supervisors.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -892,10 +892,10 @@ else:
                             
                             # Show updated subscription info (only if not stopped)
                             if not was_stopped:
-                            from app.modules.subscription import get_user_subscription
-                            subscription = get_user_subscription(st.session_state.user_id)
-                            if subscription:
-                                st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                                from app.modules.subscription import get_user_subscription
+                                subscription = get_user_subscription(st.session_state.user_id)
+                                if subscription:
+                                    st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
                         else:
                             st.error("No supervisors found.")
                     except KeyboardInterrupt:
@@ -906,20 +906,20 @@ else:
                         else:
                             st.warning("⏹️ Search interrupted. No results found yet.")
                         st.rerun()
-                            
-                except ValueError as e:
-                    # Subscription-related errors
+            
+            except ValueError as e:
+                # Subscription-related errors
                 st.write(f"🔴 DEBUG: ValueError caught: {e}")
-                    st.error(str(e))
-                    if "subscription" in str(e).lower() or "searches" in str(e).lower():
-                        if st.button("💳 Go to Subscription Page", use_container_width=True):
-                            st.session_state.show_subscription_page = True
-                            st.rerun()
-                except Exception as e:
+                st.error(str(e))
+                if "subscription" in str(e).lower() or "searches" in str(e).lower():
+                    if st.button("💳 Go to Subscription Page", use_container_width=True):
+                        st.session_state.show_subscription_page = True
+                        st.rerun()
+            except Exception as e:
                 st.write(f"🔴 DEBUG: Exception caught: {e}")
-                    st.error(f"Error running pipeline: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+                st.error(f"Error running pipeline: {e}")
+                import traceback
+                st.code(traceback.format_exc())
     
     st.divider()
     st.markdown('<p style="color: #4169E1; font-style: italic; text-align: center;">SupaFinder • AI-powered PhD supervisor discovery</p>', unsafe_allow_html=True)

@@ -6,10 +6,23 @@ from typing import List, Optional
 from pathlib import Path
 from datetime import datetime
 
-from app.config import CACHE_DB
+from app.config import CACHE_DB, get_secret
 from app.schemas import SupervisorProfile, SupervisorRecordDB
 from app.modules.utils_identity import compute_canonical_id
 from app.db_cloud import get_db_connection
+
+
+def _is_postgresql(conn) -> bool:
+    """Check if connection is PostgreSQL."""
+    try:
+        # Try to execute a PostgreSQL-specific query
+        cursor = conn.cursor()
+        cursor.execute("SELECT version()")
+        version = cursor.fetchone()[0]
+        return "PostgreSQL" in version
+    except:
+        # If query fails, assume SQLite
+        return False
 
 
 def upsert_supervisor(profile: SupervisorProfile, domain: Optional[str] = None) -> None:
@@ -223,11 +236,16 @@ def query_candidates(
     
     where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
     
+    # Check database type for parameter placeholder
+    is_pg = _is_postgresql(conn)
+    param_placeholder = "%s" if is_pg else "?"
+    
     # Build keyword search
     all_keywords = research_profile.core_keywords + research_profile.adjacent_keywords
     if debug:
         print(f"  [DEBUG] Total keywords: {len(all_keywords)} (core: {len(research_profile.core_keywords)}, adjacent: {len(research_profile.adjacent_keywords)})")
         print(f"  [DEBUG] Keywords: {all_keywords[:10]}")
+        print(f"  [DEBUG] Database type: {'PostgreSQL' if is_pg else 'SQLite'}")
     
     if not all_keywords:
         # No keywords, just return all matching constraints
@@ -235,7 +253,7 @@ def query_candidates(
             SELECT * FROM supervisors
             WHERE {where_sql}
             ORDER BY last_seen_at DESC
-            LIMIT ?
+            LIMIT {param_placeholder}
         """
         params.append(limit)
         if debug:
@@ -246,15 +264,22 @@ def query_candidates(
         # Try FTS5 search first, fallback to LIKE
         search_terms = " OR ".join([f'"{kw}"' for kw in all_keywords[:10]])  # Limit to 10 terms
         
-        try:
-            # Check if FTS5 table exists
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='supervisors_fts'")
-            fts_exists = cursor.fetchone() is not None
-            
-            if fts_exists:
-                # Try FTS5
-                # FTS5 table uses content_rowid='id', so we join on supervisors.id = supervisors_fts.rowid
-                # But we need to use the table name directly in MATCH clause
+        # PostgreSQL doesn't support SQLite FTS5, always use LIKE for PostgreSQL
+        # For SQLite, try FTS5 first, fallback to LIKE
+        if is_pg:
+            # PostgreSQL: Use LIKE search directly
+            fts_exists = False
+        else:
+            # SQLite: Check if FTS5 table exists
+            try:
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='supervisors_fts'")
+                fts_exists = cursor.fetchone() is not None
+            except:
+                fts_exists = False
+        
+        if fts_exists and not is_pg:
+            # Try FTS5 (SQLite only)
+            try:
                 fts_query = f"""
                     SELECT DISTINCT s.* FROM supervisors s
                     INNER JOIN supervisors_fts ON s.id = supervisors_fts.rowid
@@ -264,28 +289,29 @@ def query_candidates(
                 """
                 params_fts = params + [search_terms, limit]
                 if debug:
-                    print(f"  [DEBUG] Using FTS5 search")
+                    print(f"  [DEBUG] Using FTS5 search (SQLite)")
                     print(f"  [DEBUG] Query: {fts_query}")
                     print(f"  [DEBUG] Search terms: {search_terms}")
                     print(f"  [DEBUG] Params: {params_fts}")
-                try:
-                    cursor.execute(fts_query, params_fts)
-                except sqlite3.OperationalError as e:
-                    if debug:
-                        print(f"  [DEBUG] FTS5 query failed: {e}, falling back to LIKE")
-                    raise sqlite3.OperationalError("FTS5 query failed")
-            else:
-                raise sqlite3.OperationalError("FTS5 table not available")
-        except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
-            # FTS5 not available or failed, use LIKE
+                cursor.execute(fts_query, params_fts)
+            except Exception as e:
+                if debug:
+                    print(f"  [DEBUG] FTS5 query failed: {e}, falling back to LIKE")
+                # Fall through to LIKE search
+                fts_exists = False
+        
+        if not fts_exists:
+            # Use LIKE search (works for both SQLite and PostgreSQL)
             if debug:
-                print(f"  [DEBUG] FTS5 not available or failed, using LIKE: {e}")
-            like_patterns = " OR ".join([f"LOWER(keywords_text) LIKE ?" for _ in all_keywords[:10]])
+                print(f"  [DEBUG] Using LIKE search ({'PostgreSQL' if is_pg else 'SQLite'})")
+            
+            # Use appropriate parameter placeholder for database type
+            like_patterns = " OR ".join([f"LOWER(keywords_text) LIKE {param_placeholder}" for _ in all_keywords[:10]])
             query = f"""
                 SELECT * FROM supervisors
                 WHERE {where_sql} AND ({like_patterns})
                 ORDER BY last_seen_at DESC
-                LIMIT ?
+                LIMIT {param_placeholder}
             """
             like_params = params + [f"%{kw.lower()}%" for kw in all_keywords[:10]] + [limit]
             if debug:

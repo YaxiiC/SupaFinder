@@ -11,8 +11,9 @@ from datetime import datetime
 from app.db_cloud import get_db_connection, init_db
 from app.config import CACHE_DB
 
-# Dropbox database path
-DROPBOX_DB_PATH = Path("/Users/chrissychen/Dropbox/SuperFinder/cache.sqlite")
+# Dropbox database path (update this to your actual database path)
+DROPBOX_DB_PATH = Path("/Users/chrissychen/Library/CloudStorage/Dropbox/SuperFinder/cache.sqlite")
+# Alternative: Path("/Users/chrissychen/Dropbox/SuperFinder/cache.sqlite")
 
 def migrate_data():
     """Migrate data from SQLite to PostgreSQL."""
@@ -21,17 +22,44 @@ def migrate_data():
     print("迁移数据：从 Dropbox SQLite 到 Supabase PostgreSQL")
     print("=" * 60)
     
-    # Step 1: Initialize PostgreSQL database
-    print("\n1. 初始化 PostgreSQL 数据库表结构...")
+    # Step 1: Check environment configuration
+    print("\n1. 检查数据库配置...")
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    db_type = os.getenv("DB_TYPE", "sqlite").lower()
+    db_host = os.getenv("DB_HOST", "")
+    
+    if db_type != "postgresql":
+        print(f"   ✗ DB_TYPE 不是 'postgresql'，当前值: {db_type}")
+        print("   请在 .env 文件中设置: DB_TYPE=postgresql")
+        return False
+    
+    if not db_host:
+        print("   ✗ DB_HOST 未设置")
+        print("   请在 .env 文件中设置: DB_HOST=db.xxxxx.supabase.co")
+        return False
+    
+    print(f"   ✓ DB_TYPE: {db_type}")
+    print(f"   ✓ DB_HOST: {db_host}")
+    
+    # Step 2: Initialize PostgreSQL database
+    print("\n2. 初始化 PostgreSQL 数据库表结构...")
     try:
         init_db()
         print("   ✓ 数据库表结构创建成功")
     except Exception as e:
         print(f"   ✗ 初始化失败: {e}")
+        print("\n   故障排除建议:")
+        print("   1. 检查 Supabase 项目状态是否为 'Active'")
+        print("   2. 验证 .env 文件中的 DB_HOST 和 DB_PASSWORD 是否正确")
+        print("   3. 确认网络可以访问 Supabase")
+        print("   4. 查看 SUPABASE_CONNECTION_TROUBLESHOOTING.md 获取详细帮助")
         return False
     
-    # Step 2: Connect to both databases
-    print("\n2. 连接数据库...")
+    # Step 3: Connect to both databases
+    print("\n3. 连接数据库...")
     try:
         if not DROPBOX_DB_PATH.exists():
             print(f"   ✗ SQLite 数据库不存在: {DROPBOX_DB_PATH}")
@@ -48,8 +76,8 @@ def migrate_data():
         print(f"   ✗ 连接失败: {e}")
         return False
     
-    # Step 3: Migrate supervisors table
-    print("\n3. 迁移 supervisors 表...")
+    # Step 4: Migrate supervisors table
+    print("\n4. 迁移 supervisors 表...")
     try:
         sqlite_cursor.execute("SELECT COUNT(*) FROM supervisors")
         count = sqlite_cursor.fetchone()[0]

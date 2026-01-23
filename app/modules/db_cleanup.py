@@ -1,12 +1,21 @@
-"""Lightweight database cleanup functions for automatic cleanup."""
+"""Lightweight database cleanup functions for automatic cleanup.
+
+Supports both SQLite and PostgreSQL databases.
+"""
 
 import sqlite3
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
+import os
 
 from app.config import CACHE_DB, get_secret
 from app.db_cloud import get_db_connection
+
+
+def _is_postgresql() -> bool:
+    """Check if database type is PostgreSQL."""
+    return get_secret("DB_TYPE", "sqlite").lower() == "postgresql"
 
 
 def auto_cleanup_page_cache(
@@ -46,6 +55,8 @@ def auto_cleanup_page_cache(
     }
     
     try:
+        is_pg = _is_postgresql()
+        
         # Get current count
         cursor.execute("SELECT COUNT(*) FROM page_cache")
         stats['before_count'] = cursor.fetchone()[0]
@@ -57,11 +68,20 @@ def auto_cleanup_page_cache(
         
         # Delete based on keep_days
         if keep_days > 0:
-            cutoff_date = (datetime.now() - timedelta(days=keep_days)).isoformat()
-            cursor.execute(
-                "DELETE FROM page_cache WHERE datetime(fetched_at) < datetime(?)",
-                (cutoff_date,)
-            )
+            cutoff_date = datetime.now() - timedelta(days=keep_days)
+            if is_pg:
+                # PostgreSQL uses TIMESTAMP comparison
+                cursor.execute(
+                    "DELETE FROM page_cache WHERE fetched_at < %s",
+                    (cutoff_date,)
+                )
+            else:
+                # SQLite uses datetime() function
+                cutoff_date_str = cutoff_date.isoformat()
+                cursor.execute(
+                    "DELETE FROM page_cache WHERE datetime(fetched_at) < datetime(?)",
+                    (cutoff_date_str,)
+                )
             stats['deleted'] = cursor.rowcount
             conn.commit()
         else:
@@ -77,14 +97,26 @@ def auto_cleanup_page_cache(
             
             if current_count > max_cache_entries:
                 # Delete oldest entries
-                cursor.execute("""
-                    DELETE FROM page_cache 
-                    WHERE url IN (
-                        SELECT url FROM page_cache 
-                        ORDER BY fetched_at ASC 
-                        LIMIT ?
-                    )
-                """, (current_count - max_cache_entries,))
+                if is_pg:
+                    # PostgreSQL uses LIMIT in subquery
+                    cursor.execute("""
+                        DELETE FROM page_cache 
+                        WHERE url IN (
+                            SELECT url FROM page_cache 
+                            ORDER BY fetched_at ASC 
+                            LIMIT %s
+                        )
+                    """, (current_count - max_cache_entries,))
+                else:
+                    # SQLite
+                    cursor.execute("""
+                        DELETE FROM page_cache 
+                        WHERE url IN (
+                            SELECT url FROM page_cache 
+                            ORDER BY fetched_at ASC 
+                            LIMIT ?
+                        )
+                    """, (current_count - max_cache_entries,))
                 additional_deleted = cursor.rowcount
                 stats['deleted'] += additional_deleted
                 conn.commit()
@@ -128,10 +160,18 @@ def auto_cleanup_evidence_snippets(
     }
     
     try:
+        is_pg = _is_postgresql()
+        
         if clear_all:
-            cursor.execute("UPDATE supervisors SET evidence_snippets_json = '[]' WHERE evidence_snippets_json IS NOT NULL")
+            if is_pg:
+                cursor.execute("UPDATE supervisors SET evidence_snippets_json = '[]' WHERE evidence_snippets_json IS NOT NULL")
+            else:
+                cursor.execute("UPDATE supervisors SET evidence_snippets_json = '[]' WHERE evidence_snippets_json IS NOT NULL")
         else:
-            cursor.execute("UPDATE supervisors SET evidence_snippets_json = '[]' WHERE evidence_snippets_json IS NOT NULL AND evidence_snippets_json != '[]'")
+            if is_pg:
+                cursor.execute("UPDATE supervisors SET evidence_snippets_json = '[]' WHERE evidence_snippets_json IS NOT NULL AND evidence_snippets_json != '[]'")
+            else:
+                cursor.execute("UPDATE supervisors SET evidence_snippets_json = '[]' WHERE evidence_snippets_json IS NOT NULL AND evidence_snippets_json != '[]'")
         
         stats['cleared'] = cursor.rowcount
         conn.commit()

@@ -33,3 +33,4 @@ outputs/*.xlsx
 .DS_Store
 Thumbs.db
 
+streamlit_secrets_config.toml

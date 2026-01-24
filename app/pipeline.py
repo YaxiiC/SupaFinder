@@ -751,8 +751,8 @@ def run_pipeline(
         final_profiles = select_with_diversity(unique_profiles, n=10, max_per_institution=1, min_institutions=3)
         console.print(f"[yellow]Free trial: Selected {len(final_profiles)} supervisors from different institutions (minimum 3 schools)[/yellow]")
     else:
-        # Paid users: target supervisors (default 100), max 10 per institution
-        final_profiles = select_with_diversity(unique_profiles, n=target, max_per_institution=10)
+        # Paid users: target supervisors (default 100), max 8 per institution (strict limit)
+        final_profiles = select_with_diversity(unique_profiles, n=target, max_per_institution=8, strict_limit=True)
     
     core_count = sum(1 for p in final_profiles if p.tier == "Core")
     # Show diversity statistics

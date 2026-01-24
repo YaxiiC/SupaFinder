@@ -192,6 +192,11 @@ if "user_email" not in st.session_state:
     st.session_state.user_email = None
 if "user_id" not in st.session_state:
     st.session_state.user_id = None
+if "language" not in st.session_state:
+    st.session_state.language = "en"  # Default to English
+
+# Import translation module
+from app.modules.i18n import t, get_language, set_language
 
 # Handle payment success callback
 if "payment" in st.query_params and st.query_params["payment"] == "success":
@@ -223,10 +228,24 @@ st.set_page_config(
 
 # Sidebar for authentication and subscription
 with st.sidebar:
-    st.header("🔐 Account")
+    # Language selector
+    lang = st.selectbox(
+        t("sidebar_language"),
+        options=["en", "zh"],
+        format_func=lambda x: "English" if x == "en" else "中文",
+        index=0 if st.session_state.language == "en" else 1,
+        key="language_selector"
+    )
+    if lang != st.session_state.language:
+        set_language(lang)
+        st.rerun()
+    
+    st.divider()
+    
+    st.header(t("sidebar_account"))
     
     if st.session_state.user_email:
-        st.success(f"Logged in as: {st.session_state.user_email}")
+        st.success(f"{t('sidebar_logged_in')} {st.session_state.user_email}")
         
         # Check if developer
         from app.modules.subscription import get_user_subscription, is_developer, is_beta_user, get_beta_free_searches_remaining
@@ -234,21 +253,21 @@ with st.sidebar:
         is_beta = is_beta_user(st.session_state.user_email)
         
         if is_dev:
-            st.success("🔧 **Developer Mode** - Unlimited access")
+            st.success(t("sidebar_developer_mode"))
         elif is_beta:
             # Check beta user status
             beta_searches = get_beta_free_searches_remaining(st.session_state.user_id)
             if beta_searches is not None and beta_searches > 0:
-                st.info(f"🧪 **Beta User** - {beta_searches} free searches remaining")
+                st.info(f"{t('sidebar_beta_user')} - {beta_searches} {t('sidebar_beta_searches_remaining')}")
             else:
-                st.warning("🧪 **Beta User** - Free searches used up")
+                st.warning(f"{t('sidebar_beta_user')} - {t('sidebar_beta_searches_used')}")
             
             # Also show subscription if they have one
             subscription = get_user_subscription(st.session_state.user_id)
             if subscription:
-                st.subheader("📊 Subscription")
-                st.write(f"**Plan:** {subscription['type'].title()}")
-                st.write(f"**Remaining searches:** {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                st.subheader(t("sidebar_subscription"))
+                st.write(f"**{t('sidebar_plan')}** {subscription['type'].title()}")
+                st.write(f"**{t('sidebar_searches_remaining')}** {subscription['remaining_searches']}/{subscription['searches_per_month']}")
                 
                 from datetime import datetime
                 expires_at = subscription['expires_at']
@@ -260,9 +279,9 @@ with st.sidebar:
             subscription = get_user_subscription(st.session_state.user_id)
             
             if subscription:
-                st.subheader("📊 Subscription")
-                st.write(f"**Plan:** {subscription['type'].title()}")
-                st.write(f"**Remaining searches:** {subscription['remaining_searches']}/{subscription['searches_per_month']}")
+                st.subheader(t("sidebar_subscription"))
+                st.write(f"**{t('sidebar_plan')}** {subscription['type'].title()}")
+                st.write(f"**{t('sidebar_searches_remaining')}** {subscription['remaining_searches']}/{subscription['searches_per_month']}")
                 
                 from datetime import datetime
                 expires_at = subscription['expires_at']
@@ -279,7 +298,7 @@ with st.sidebar:
         if st.button("📜 Search History", use_container_width=True):
             st.session_state.show_history_page = True
         
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button(t("sidebar_logout"), use_container_width=True):
             st.session_state.user_email = None
             st.session_state.user_id = None
             st.session_state.show_subscription_page = False
@@ -289,13 +308,13 @@ with st.sidebar:
         st.info("Please log in to use the service")
         
         # Email/Password Login
-        login_tab, register_tab = st.tabs(["Login", "Register"])
+        login_tab, register_tab = st.tabs([t("login_title"), t("register_title")])
         
         with login_tab:
             with st.form("login_form"):
-                email = st.text_input("Email", placeholder="your.email@example.com", key="login_email")
-                password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
-                submit_login = st.form_submit_button("Login", use_container_width=True)
+                email = st.text_input(t("email_label"), placeholder="your.email@example.com", key="login_email")
+                password = st.text_input(t("password_label"), type="password", placeholder=t("password_label"), key="login_password")
+                submit_login = st.form_submit_button(t("login_button"), use_container_width=True)
             
             if submit_login:
                 if email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
@@ -323,10 +342,10 @@ with st.sidebar:
                                 if is_valid:
                                     st.session_state.user_email = email_lower
                                     st.session_state.user_id = user_id
-                                    st.success("Logged in successfully!")
+                                    st.success(t("login_success"))
                                     st.rerun()
                                 else:
-                                    st.error("Invalid email or password. If you haven't set a password yet, please register first.")
+                                    st.error(t("login_error"))
                     except Exception as e:
                         st.error(f"Error: {e}")
                 else:
@@ -335,10 +354,10 @@ with st.sidebar:
         with register_tab:
             with st.form("register_form"):
                 st.info("Create a new account with email and password")
-                reg_email = st.text_input("Email", placeholder="your.email@example.com", key="reg_email")
-                reg_password = st.text_input("Password", type="password", placeholder="At least 8 characters", key="reg_password")
-                reg_password_confirm = st.text_input("Confirm Password", type="password", placeholder="Re-enter password", key="reg_password_confirm")
-                submit_register = st.form_submit_button("Register", use_container_width=True)
+                reg_email = st.text_input(t("email_label"), placeholder="your.email@example.com", key="reg_email")
+                reg_password = st.text_input(t("password_label"), type="password", placeholder=t("password_label"), key="reg_password")
+                reg_password_confirm = st.text_input(t("confirm_password_label"), type="password", placeholder=t("confirm_password_label"), key="reg_password_confirm")
+                submit_register = st.form_submit_button(t("register_button"), use_container_width=True)
                 
                 if submit_register:
                     if reg_email and re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', reg_email):
@@ -353,7 +372,7 @@ with st.sidebar:
                             if not is_valid:
                                 st.error(error_msg)
                             elif reg_password != reg_password_confirm:
-                                st.error("Passwords do not match")
+                                st.error(t("password_mismatch"))
                             else:
                                 try:
                                     reg_email_lower = reg_email.lower().strip()
@@ -370,7 +389,7 @@ with st.sidebar:
                                         
                                         st.session_state.user_email = reg_email_lower
                                         st.session_state.user_id = user_id
-                                        st.success("Account created successfully! You are now logged in.")
+                                        st.success(t("register_success"))
                                         st.rerun()
                                 except Exception as e:
                                     st.error(f"Error: {e}")
@@ -610,53 +629,53 @@ elif st.session_state.get("show_history_page"):
 
 else:
     # Main search interface
-    st.markdown('<h1 style="color: #4169E1;">🔍 SupaFinder</h1>', unsafe_allow_html=True)
-    st.markdown("*AI-assisted PhD supervisor discovery*")
+    st.markdown(f'<h1 style="color: #4169E1;">🔍 {t("app_title")}</h1>', unsafe_allow_html=True)
+    st.markdown(f"*{t('app_subtitle')}*")
     
     if not st.session_state.user_email:
-        st.warning("⚠️ Please log in using the sidebar to use the service. First-time users get 1 free search!")
+        st.warning(t("main_warning_login"))
     
     st.divider()
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📄 Your CV (Optional)")
-        st.caption("You can upload a CV, enter keywords, or both")
-        cv_file = st.file_uploader("Upload your CV (PDF or TXT)", type=["pdf", "txt"], help="Optional: Upload your CV to extract research interests automatically")
+        st.subheader(t("cv_section"))
+        st.caption(t("cv_caption"))
+        cv_file = st.file_uploader(t("cv_upload"), type=["pdf", "txt"], help=t("cv_help"))
         
-        st.subheader("🔬 Research Keywords (Optional)")
+        st.subheader(t("keywords_section"))
         keywords = st.text_area(
-            "Enter your research keywords (comma-separated)",
-            placeholder="e.g., psychology, social sciences, behavioral sciences, cognitive sciences, human development, developmental psychology",
+            t("keywords_label"),
+            placeholder=t("keywords_placeholder"),
             height=100,
-            help="Optional: Enter your research keywords. At least one of CV or keywords is required."
+            help=t("keywords_help")
         )
     
     with col2:
-        st.subheader("🏛️ Universities")
-        st.info("Using built-in universities list (QS Rank Top 200+ universities worldwide)")
+        st.subheader(t("universities_section"))
+        st.info(t("universities_info"))
         
-        st.subheader("🎯 Filters")
+        st.subheader(t("filters_section"))
         
         regions = st.text_input(
-            "Regions (comma-separated)",
-            placeholder="e.g., Europe, North America, Asia"
+            t("regions_label"),
+            placeholder=t("regions_placeholder")
         )
         
         countries = st.text_input(
-            "Countries (comma-separated)",
-            placeholder="e.g., Singapore, Sweden, United Kingdom"
+            t("countries_label"),
+            placeholder=t("countries_placeholder")
         )
         
         col_a, col_b = st.columns(2)
         with col_a:
-            qs_min = st.number_input("Min QS Rank", min_value=1, max_value=1000, value=1, help="Minimum QS World University Ranking")
-            qs_max = st.number_input("Max QS Rank", min_value=1, max_value=1000, value=100, help="Maximum QS World University Ranking")
+            qs_min = st.number_input(t("qs_min_label"), min_value=1, max_value=1000, value=1, help=t("qs_min_help"))
+            qs_max = st.number_input(t("qs_max_label"), min_value=1, max_value=1000, value=100, help=t("qs_max_help"))
         with col_b:
-            target = st.number_input("Target Supervisors", min_value=10, max_value=500, value=100)
+            target = st.number_input(t("target_label"), min_value=10, max_value=500, value=100)
         
-        local_first = st.checkbox("Use local DB first (recommended)", value=True)
+        local_first = st.checkbox(t("local_db_label"), value=True)
     
     st.divider()
     
@@ -842,9 +861,9 @@ else:
                     # Display stop button BEFORE running pipeline (to avoid duplicate key errors)
                     # The button will be shown/hidden by update_progress callback
                     with stop_button_container:
-                        if st.button("⏹️ Stop Search", type="secondary", use_container_width=True, key="stop_search_btn"):
+                        if st.button(t("stop_search_button"), type="secondary", use_container_width=True, key="stop_search_btn"):
                             st.session_state.search_stopped = True
-                            st.warning("Stopping search... Please wait for current step to finish.")
+                            st.warning(t("stopping_search"))
                             st.rerun() # Rerun to process the stop flag
                     
                     st.write("🔴 DEBUG: Calling run_pipeline...")
@@ -869,10 +888,11 @@ else:
                         was_stopped = st.session_state.get('search_stopped', False)
                         
                         if was_stopped:
-                            st.warning(f"⏹️ Search stopped by user. Found {len(found_profiles) if found_profiles else 0} supervisors.")
-                            status_text.warning("⏹️ Search was stopped. You can export the results found so far.")
+                            count = len(found_profiles) if found_profiles else 0
+                            st.warning(t("search_stopped").format(count=count))
+                            status_text.warning(t("search_stopped_no_results"))
                         else:
-                            st.success("✅ Pipeline completed successfully!")
+                            st.success(t("search_completed"))
                         
                         # Export results (even if stopped)
                         if found_profiles and len(found_profiles) > 0:
@@ -883,7 +903,7 @@ else:
                         if output_path.exists():
                             with open(output_path, "rb") as f:
                                 st.download_button(
-                                    label=f"📥 Download Results (Excel) - {len(found_profiles)} supervisors",
+                                    label=t("download_results").format(count=len(found_profiles)),
                                     data=f.read(),
                                     file_name="supervisors.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -897,14 +917,15 @@ else:
                                 if subscription:
                                     st.info(f"Remaining searches: {subscription['remaining_searches']}/{subscription['searches_per_month']}")
                         else:
-                            st.error("No supervisors found.")
+                            st.error(t("no_results"))
                     except KeyboardInterrupt:
                         # Handle manual stop
                         st.session_state.search_stopped = True
                         if st.session_state.partial_results:
-                            st.warning(f"⏹️ Search interrupted. Found {len(st.session_state.partial_results)} supervisors so far.")
+                            count = len(st.session_state.partial_results)
+                            st.warning(t("search_stopped").format(count=count))
                         else:
-                            st.warning("⏹️ Search interrupted. No results found yet.")
+                            st.warning(t("search_stopped_no_results"))
                         st.rerun()
             
             except ValueError as e:
@@ -917,9 +938,9 @@ else:
                         st.rerun()
             except Exception as e:
                 st.write(f"🔴 DEBUG: Exception caught: {e}")
-                st.error(f"Error running pipeline: {e}")
+                st.error(f"{t('error_pipeline')} {e}")
                 import traceback
                 st.code(traceback.format_exc())
     
     st.divider()
-    st.markdown('<p style="color: #4169E1; font-style: italic; text-align: center;">SupaFinder • AI-powered PhD supervisor discovery</p>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color: #4169E1; font-style: italic; text-align: center;">{t("app_footer")}</p>', unsafe_allow_html=True)

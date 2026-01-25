@@ -98,7 +98,7 @@ def init_db(db_path: Path = CACHE_DB) -> None:
     # Create FTS5 virtual table for full-text search (SQLite only)
     # PostgreSQL doesn't support FTS5, skip it for PostgreSQL
     if not is_pg:
-    try:
+        try:
         cursor.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS supervisors_fts USING fts5(
                 name,
@@ -186,7 +186,7 @@ def cache_page(url: str, html: str, text_content: str, status_code: int, db_path
         """, (url, html, text_content, datetime.now().isoformat(), status_code))
     else:
         # SQLite uses INSERT OR REPLACE
-    cursor.execute("""
+        cursor.execute("""
         INSERT OR REPLACE INTO page_cache (url, html, text_content, fetched_at, status_code)
         VALUES (?, ?, ?, ?, ?)
     """, (url, html, text_content, datetime.now().isoformat(), status_code))
@@ -231,7 +231,7 @@ def cache_profile(url: str, profile: dict, db_path: Path = CACHE_DB) -> None:
         """, (url, json.dumps(profile), datetime.now().isoformat()))
     else:
         # SQLite uses INSERT OR REPLACE
-    cursor.execute("""
+        cursor.execute("""
         INSERT OR REPLACE INTO extracted_profiles (url, profile_json, extracted_at)
         VALUES (?, ?, ?)
     """, (url, json.dumps(profile), datetime.now().isoformat()))

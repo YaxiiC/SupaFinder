@@ -413,7 +413,7 @@ class ProfileExtractor:
                 "funding", "admission", "application", "registration"
             ]
             if words[0] in single_word_blacklist:
-            return False
+                return False
         
         # Reject academic/program names (e.g., "Taught Masters Mechanical Engineering")
         academic_terms = [
@@ -801,6 +801,7 @@ class ProfileExtractor:
         Examples of blank pages:
         - https://medicine-psychology.anu.edu.au/people/dr-kerrie-aust
         - https://www.liverpool.ac.uk/people/yu-lin-lu
+        - https://www.mgmt.ucl.ac.uk/people/viethungly
         """
         text_lower = text_content.lower()
         text_length = len(text_content.strip())
@@ -809,7 +810,9 @@ class ProfileExtractor:
         navigation_keywords = [
             "skip to main content", "menu", "navigation", "search", "contact us", 
             "about us", "home", "staff", "news", "events", "alumni", "current students",
-            "study", "research", "people", "services", "our impact", "partner with us"
+            "study", "research", "people", "services", "our impact", "partner with us",
+            "job vacancies", "toggle navigation", "blog", "contact", "advanced search",
+            "freedom of information", "accessibility", "privacy", "cookies", "disclaimer"
         ]
         content_text = text_content
         for nav_keyword in navigation_keywords:
@@ -862,17 +865,35 @@ class ProfileExtractor:
             return True
         
         # Check for pages that only have name, title, email, and affiliation
-        # These are typically blank pages
+        # These are typically blank pages (e.g., Teaching Assistant pages with no research content)
         basic_info_patterns = [
             r'\bdr\s+[a-z\s]+\b',  # Name
-            r'\bprofessor\b|\bprof\b|\blecturer\b',  # Title
+            r'\bprofessor\b|\bprof\b|\blecturer\b|\bteaching\s+assistant\b',  # Title
             r'[a-z]+@[a-z\.]+\.[a-z]+',  # Email
             r'\buniversity\b|\binstitution\b|\bschool\b|\bdepartment\b'  # Affiliation
         ]
         
-        # If text mostly matches basic info patterns and is short, likely blank
+        # Count how many basic info patterns are present
         basic_info_matches = sum(1 for pattern in basic_info_patterns if re.search(pattern, text_lower))
-        if basic_info_matches >= 3 and meaningful_length < 400 and research_indicator_count < 2:
+        
+        # STRICT: If page has basic info (name, title, email) but no research content, it's blank
+        # This catches pages like https://www.mgmt.ucl.ac.uk/people/viethungly
+        if basic_info_matches >= 2:  # At least name/title and email
+            # Check if there's substantial research content beyond basic info
+            # If meaningful length is short and research indicators are few, it's blank
+            if meaningful_length < 500 and research_indicator_count < 2:
+                return True
+            # Even if length is OK, if research indicators are very few, likely blank
+            if meaningful_length < 800 and research_indicator_count < 1:
+                return True
+        
+        # Additional check: If page only contains name, title, email, and navigation,
+        # and has no paragraphs or substantial text blocks, it's blank
+        paragraphs = soup.find_all(['p', 'div'], class_=re.compile(r'content|bio|description|about', re.I))
+        paragraph_text = " ".join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
+        
+        # If no substantial paragraphs and content is minimal, likely blank
+        if len(paragraph_text.strip()) < 200 and meaningful_length < 600 and research_indicator_count < 2:
             return True
         
         return False

@@ -217,7 +217,7 @@ def select_with_diversity(
         ranked = rank_profiles(scored)
         
         if strict_limit:
-            # Apply strict diversity constraint even in fallback
+            # First try with strict limit
             selected = []
             institution_count = {}
             for profile in ranked:
@@ -228,13 +228,46 @@ def select_with_diversity(
                 if current_count < max_per_institution:
                     selected.append(profile)
                     institution_count[institution] = current_count + 1
+            
+            # If we still don't have enough and there are enough candidates available,
+            # calculate the minimum per-institution limit needed to reach target
+            if len(selected) < n and len(ranked) >= n:
+                # Count unique institutions in top candidates
+                unique_institutions = set()
+                for profile in ranked[:min(n * 2, len(ranked))]:  # Check first 2n profiles or all if less
+                    inst = profile.institution.lower().strip() if profile.institution else ""
+                    if inst:  # Only count non-empty institutions
+                        unique_institutions.add(inst)
+                
+                num_institutions = len(unique_institutions)
+                if num_institutions > 0:
+                    # Calculate needed per-institution limit to reach target
+                    needed_per_inst = (n + num_institutions - 1) // num_institutions  # Ceiling division
+                    # If we have enough candidates to meet target, use the calculated limit
+                    # But cap it at a reasonable maximum (e.g., n/2 to ensure some diversity)
+                    max_reasonable = max(n // 2, max_per_institution * 2)  # At least 2x original, or n/2
+                    effective_limit = min(needed_per_inst, max_reasonable)
+                    
+                    # Only use this if it's better than what we have
+                    if effective_limit > max_per_institution:
+                        selected = []
+                        institution_count = {}
+                        for profile in ranked:
+                            if len(selected) >= n:
+                                break
+                            institution = profile.institution.lower().strip() if profile.institution else ""
+                            current_count = institution_count.get(institution, 0)
+                            if current_count < effective_limit:
+                                selected.append(profile)
+                                institution_count[institution] = current_count + 1
+            
             return selected
         else:
             return ranked[:n]
     
     # Apply final strict limit check if strict_limit is True
     if strict_limit:
-        # Ensure no institution exceeds the limit
+        # First apply strict limit
         final_selected = []
         institution_count = {}
         for profile in best_result:
@@ -243,6 +276,34 @@ def select_with_diversity(
             if current_count < max_per_institution:
                 final_selected.append(profile)
                 institution_count[institution] = current_count + 1
+        
+        # If filtering reduced us below target and we have enough candidates, relax limit
+        if len(final_selected) < n and len(best_result) >= n:
+            # Calculate needed per-institution limit
+            unique_institutions = set()
+            for profile in best_result:
+                inst = profile.institution.lower().strip() if profile.institution else ""
+                if inst:
+                    unique_institutions.add(inst)
+            num_institutions = len(unique_institutions)
+            if num_institutions > 0:
+                needed_per_inst = (n + num_institutions - 1) // num_institutions
+                # Cap at reasonable maximum
+                max_reasonable = max(n // 2, max_per_institution * 2)
+                effective_limit = min(needed_per_inst, max_reasonable)
+                
+                if effective_limit > max_per_institution:
+                    final_selected = []
+                    institution_count = {}
+                    for profile in best_result:
+                        if len(final_selected) >= n:
+                            break
+                        institution = profile.institution.lower().strip() if profile.institution else ""
+                        current_count = institution_count.get(institution, 0)
+                        if current_count < effective_limit:
+                            final_selected.append(profile)
+                            institution_count[institution] = current_count + 1
+        
         return final_selected
     
     # Return best result found

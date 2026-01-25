@@ -208,7 +208,7 @@ if filter_confidence != "All":
     query += " AND email_confidence = ?"
     params.append(filter_confidence)
 
-query += " ORDER BY last_seen_at DESC LIMIT 100"
+query += " ORDER BY last_seen_at DESC"
 
 conn, cursor = get_cursor()
 cursor.execute(query, params)
@@ -331,6 +331,74 @@ if st.session_state.get('show_add_form') or st.session_state.get('extracted_prof
 st.subheader(f"Supervisors ({len(rows)} shown)")
 
 if rows:
+    # Bulk deletion section
+    with st.expander("🗑️ Bulk Delete Supervisors", expanded=False):
+        st.markdown("**Select multiple supervisors to delete**")
+        
+        # Create options for multi-select
+        supervisor_options_dict = {f"{row[0]}: {row[1]} ({row[2]})": row[0] for row in rows}
+        supervisor_options_list = list(supervisor_options_dict.keys())
+        
+        selected_for_deletion = st.multiselect(
+            "Select supervisors to delete:",
+            options=supervisor_options_list,
+            key="bulk_delete_select",
+            help="Select one or more supervisors to delete. Use Ctrl/Cmd to select multiple."
+        )
+        
+        if selected_for_deletion:
+            st.warning(f"⚠️ {len(selected_for_deletion)} supervisor(s) selected for deletion")
+            
+            # Show selected supervisors
+            with st.expander("View selected supervisors", expanded=False):
+                for option in selected_for_deletion:
+                    st.text(f"  • {option}")
+            
+            # Confirmation and delete button
+            col_del1, col_del2 = st.columns([1, 1])
+            with col_del1:
+                if st.button("🗑️ Delete Selected", type="primary", use_container_width=True, key="bulk_delete_btn"):
+                    if st.session_state.get('confirm_bulk_delete') != tuple(selected_for_deletion):
+                        st.session_state['confirm_bulk_delete'] = tuple(selected_for_deletion)
+                        st.warning("⚠️ Click again to confirm bulk deletion")
+                    else:
+                        try:
+                            conn, cursor = get_cursor()
+                            deleted_count = 0
+                            deleted_names = []
+                            
+                            for option in selected_for_deletion:
+                                supervisor_id = supervisor_options_dict[option]
+                                # Get name before deleting for confirmation message
+                                cursor.execute("SELECT name FROM supervisors WHERE id = ?", (supervisor_id,))
+                                name_result = cursor.fetchone()
+                                name = name_result[0] if name_result else f"ID {supervisor_id}"
+                                
+                                cursor.execute("DELETE FROM supervisors WHERE id = ?", (supervisor_id,))
+                                deleted_count += 1
+                                deleted_names.append(name)
+                            
+                            conn.commit()
+                            
+                            # Clear confirmation state
+                            if 'confirm_bulk_delete' in st.session_state:
+                                del st.session_state['confirm_bulk_delete']
+                            
+                            st.success(f"✓ Successfully deleted {deleted_count} supervisor(s): {', '.join(deleted_names[:5])}{'...' if len(deleted_names) > 5 else ''}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting supervisors: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+            
+            with col_del2:
+                if st.button("❌ Clear Selection", use_container_width=True, key="clear_bulk_delete_btn"):
+                    if 'confirm_bulk_delete' in st.session_state:
+                        del st.session_state['confirm_bulk_delete']
+                    st.rerun()
+    
+    st.divider()
+    
     # Create a selectbox for choosing supervisor
     supervisor_options = {f"{row[0]}: {row[1]} ({row[2]})": row[0] for row in rows}
     selected = st.selectbox("Select a supervisor to edit:", list(supervisor_options.keys()))

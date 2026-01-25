@@ -915,6 +915,7 @@ def process_university(university: University, research_profile: ResearchProfile
         "extraction_failed: student_postdoc": 0,
         "extraction_failed: negative_keyword": 0,
         "extraction_failed: very_low_fit_score": 0,
+        "extraction_failed: blank_profile_page": 0,
         "other": 0
     }
     
@@ -979,7 +980,9 @@ def process_university(university: University, research_profile: ResearchProfile
                 # Use the detailed failure reason from extract method
                 if extraction_failure_reason:
                     # Map detailed reasons to categories for statistics
-                    if "no_name" in extraction_failure_reason:
+                    if "blank_profile_page" in extraction_failure_reason:
+                        reason_category = "extraction_failed: blank_profile_page"
+                    elif "no_name" in extraction_failure_reason:
                         reason_category = "extraction_failed: no_name"
                     elif "invalid_name" in extraction_failure_reason:
                         reason_category = "extraction_failed: invalid_name"

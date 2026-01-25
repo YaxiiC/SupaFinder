@@ -99,41 +99,41 @@ def init_db(db_path: Path = CACHE_DB) -> None:
     # PostgreSQL doesn't support FTS5, skip it for PostgreSQL
     if not is_pg:
         try:
-        cursor.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS supervisors_fts USING fts5(
-                name,
-                institution,
-                title,
-                keywords_text,
-                content='supervisors',
-                content_rowid='id'
-            )
-        """)
-        
-        # Create triggers to keep FTS5 in sync
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS supervisors_fts_insert AFTER INSERT ON supervisors BEGIN
-                INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
-                VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
-            END
-        """)
-        
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS supervisors_fts_delete AFTER DELETE ON supervisors BEGIN
-                DELETE FROM supervisors_fts WHERE rowid = old.id;
-            END
-        """)
-        
-        cursor.execute("""
-            CREATE TRIGGER IF NOT EXISTS supervisors_fts_update AFTER UPDATE ON supervisors BEGIN
-                DELETE FROM supervisors_fts WHERE rowid = old.id;
-                INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
-                VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
-            END
-        """)
-    except sqlite3.OperationalError:
-        # FTS5 might not be available, skip it
-        pass
+            cursor.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS supervisors_fts USING fts5(
+                    name,
+                    institution,
+                    title,
+                    keywords_text,
+                    content='supervisors',
+                    content_rowid='id'
+                )
+            """)
+            
+            # Create triggers to keep FTS5 in sync
+            cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS supervisors_fts_insert AFTER INSERT ON supervisors BEGIN
+                    INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
+                    VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
+                END
+            """)
+            
+            cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS supervisors_fts_delete AFTER DELETE ON supervisors BEGIN
+                    DELETE FROM supervisors_fts WHERE rowid = old.id;
+                END
+            """)
+            
+            cursor.execute("""
+                CREATE TRIGGER IF NOT EXISTS supervisors_fts_update AFTER UPDATE ON supervisors BEGIN
+                    DELETE FROM supervisors_fts WHERE rowid = old.id;
+                    INSERT INTO supervisors_fts(rowid, name, institution, title, keywords_text)
+                    VALUES (new.id, new.name, new.institution, new.title, new.keywords_text);
+                END
+            """)
+        except sqlite3.OperationalError:
+            # FTS5 might not be available, skip it
+            pass
     
     conn.commit()
     conn.close()
